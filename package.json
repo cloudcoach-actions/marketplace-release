@@ -1,0 +1,26 @@
+{
+  "name": "marketplace-release",
+  "version": "1.0.0",
+  "description": "Github Action to support releases for the feature marketplace",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "package": "ncc build src/index.ts --source-map --license licenses.txt",
+    "test": "jest"
+  },
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cloudcoach-actions/marketplace-release.git"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@vercel/ncc": "^0.38.3",
+    "archiver": "^7.0.1",
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1"
+  }
+}

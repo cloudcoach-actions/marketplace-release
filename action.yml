@@ -1,0 +1,5 @@
+name: Marketplace Release Action
+description: Performs a set of actions to support releases of feature marketplace code
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
