@@ -18,9 +18,11 @@
     "@actions/core": "^1.11.1",
     "@vercel/ncc": "^0.38.3",
     "archiver": "^7.0.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
-    "@types/node": "^22.10.1"
+    "@types/node": "^22.10.1",
+    "@types/xml2js": "^0.4.14"
   }
 }

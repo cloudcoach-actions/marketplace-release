@@ -1,11 +1,21 @@
+import * as core from '@actions/core';
 import * as archiver from 'archiver';
 import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
-import { IndexData } from './models/marketplace.models';
+import { Builder } from 'xml2js';
+import {
+	IndexData,
+	metadataTypeFolderMappings,
+	SalesforcePackageXmlType,
+} from './models/marketplace.models';
 
 const contentDir = path.join(__dirname, 'content');
 const indexFile = path.join(__dirname, 'index.json');
+
+const ignoredFolders: string[] = ['dist'];
+const ignoredFileNames: string[] = ['.DS_Store'];
+const errors: string[] = [];
 
 /**
  * Read all files from the given folders and their subfolders using fs.readdir's
@@ -38,6 +48,8 @@ const getFolderStructure = async (folderPaths: string[]) => {
 
 /**
  * Create a zip file of the contents of a specified folder
+ * excluding the 'dist' folder.
+ *
  * @param sourceDir The path to the folder to zip
  * @param outPath The path to the output zip file
  */
@@ -71,10 +83,85 @@ const zipFolder = async (sourceDir: string, outPath: string): Promise<void> => {
 	});
 };
 
+const getSubdirectories = async (directory: string): Promise<string[]> => {
+	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
+	return entries
+		.filter(
+			entry => entry.isDirectory() && !ignoredFolders.includes(entry.name),
+		)
+		.map(entry => path.join(directory, entry.name));
+};
+
+const getFiles = async (directory: string): Promise<string[]> => {
+	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
+	return entries
+		.filter(
+			entry => !entry.isDirectory() && !ignoredFileNames.includes(entry.name),
+		)
+		.map(entry => path.join(directory, entry.name));
+};
+
+const createPackageXmlContent = (
+	types: SalesforcePackageXmlType,
+	version: string,
+) => {
+	let xml: string = '';
+	try {
+		const builder = new Builder();
+		const mappedTypes: Array<{ members: string[]; name: string }> = [];
+		const packObj = {
+			Package: {
+				types: mappedTypes,
+				version,
+			},
+		};
+
+		// Append new nodes to the Package object
+		Object.entries(types).forEach(([name, members]) => {
+			mappedTypes.push({
+				members,
+				name,
+			});
+		});
+
+		xml = builder
+			.buildObject(packObj)
+			.replace(
+				'<Package>',
+				'<Package xmlns="http://soap.sforce.com/2006/04/metadata">',
+			)
+			.replace(' standalone="yes"', '');
+	} catch (ex) {
+		const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
+		errors.push(`Error creating package.xml: ${errMsg}`);
+	}
+
+	return xml;
+};
+
+const createPackageXml = async (featurePath: string): Promise<string> => {
+	const folders = await getSubdirectories(featurePath);
+
+	const types: SalesforcePackageXmlType = {};
+	for (const folder of folders) {
+		const baseName = path.basename(folder);
+		if (metadataTypeFolderMappings[baseName]) {
+			// Read files and folders (hence using 'entries' convention)
+			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
+			types[metadataTypeFolderMappings[baseName]] = entries.map(
+				entry => path.parse(entry.name).name,
+			);
+		}
+	}
+
+	return Promise.resolve(createPackageXmlContent(types, '62.0'));
+};
+
 const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	// Get a list of each of the child folders under features
 	const features = await fsPromises.readdir(contentDir);
 
+	// Create an object to store the index data as we iterate through each feature
 	const info: IndexData = {
 		features: [],
 	};
@@ -98,21 +185,31 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			version: parsed.version,
 			files: files.map(file => path.relative(featurePath, file)),
 		});
-		console.log('info', info);
+
+		// Create the package.xml file
+		const packageXml = await createPackageXml(featurePath);
+		const packageXmlPath = path.join(featurePath, 'package.xml');
+		await fsPromises.writeFile(packageXmlPath, packageXml);
 
 		// Ensure the dist folder exists
 		const distPath = path.join(featurePath, 'dist');
 		await fsPromises.mkdir(distPath, { recursive: true });
 
+		// Zip the contents of the feature folder (including package.xml) and save
+		// it to the dist folder
 		await zipFolder(
 			featurePath,
 			path.join(featurePath, 'dist', `${folder}.zip`),
 		);
 	}
 
+	// Write the updated index.json file
 	await fsPromises.writeFile(indexFile, JSON.stringify(info, null, 2));
 };
 
 (async () => {
 	await run(contentDir, indexFile);
+	if (errors.length) {
+		core.setFailed(errors.join('\n'));
+	}
 })();
