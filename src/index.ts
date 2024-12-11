@@ -189,6 +189,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 
 		// Create the package.xml file
 		const packageXml = await createPackageXml(featurePath);
+		core.info(`packageXml: ${packageXml}`);
 		const packageXmlPath = path.join(featurePath, 'package.xml');
 		await fsPromises.writeFile(packageXmlPath, packageXml);
 
@@ -203,6 +204,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			path.join(featurePath, 'dist', `${folder}.zip`),
 		);
 	}
+
+	core.info('index.json: ' + JSON.stringify(info, null, 2));
 
 	// Write the updated index.json file
 	await fsPromises.writeFile(indexFile, JSON.stringify(info, null, 2));
