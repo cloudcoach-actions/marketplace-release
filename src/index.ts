@@ -208,6 +208,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 };
 
 (async () => {
+	core.info('contentDir: ' + contentDir);
+	core.info('indexFile: ' + indexFile);
 	await run(contentDir, indexFile);
 	if (errors.length) {
 		core.setFailed(errors.join('\n'));
