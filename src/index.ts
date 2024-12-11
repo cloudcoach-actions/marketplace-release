@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import * as archiver from 'archiver';
+import archiver from 'archiver';
 import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
