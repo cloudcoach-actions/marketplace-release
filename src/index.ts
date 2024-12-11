@@ -12,6 +12,7 @@ import {
 
 const contentDir = path.join(__dirname, 'content');
 const indexFile = path.join(__dirname, 'index.json');
+const gitHubWorkspace = process.env.GITHUB_WORKSPACE;
 
 const ignoredFolders: string[] = ['dist'];
 const ignoredFileNames: string[] = ['.DS_Store'];
@@ -210,6 +211,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 (async () => {
 	core.info('contentDir: ' + contentDir);
 	core.info('indexFile: ' + indexFile);
+	core.info('gitHubWorkspace: ' + gitHubWorkspace);
 	await run(contentDir, indexFile);
 	if (errors.length) {
 		core.setFailed(errors.join('\n'));
