@@ -11,6 +11,7 @@ import {
 	SalesforcePackageXmlType,
 } from './models/marketplace.models';
 
+// Constants
 const GITHUB_TRIGGERING_ACTOR: string = process.env.GITHUB_TRIGGERING_ACTOR!;
 const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
@@ -24,7 +25,7 @@ const errors: string[] = [];
  * Read all files from the given folders and their subfolders using fs.readdir's
  * recursive option.
  *
- * @param folderPaths - Array of folder paths to read
+ * @param folderPaths Array of folder paths to read
  * @returns A promise that resolves to an array of file paths
  */
 const getFolderStructure = async (folderPaths: string[]) => {
@@ -42,8 +43,7 @@ const getFolderStructure = async (folderPaths: string[]) => {
 			const filePaths = files.map(file => path.resolve(folder, file));
 			allFilePaths = allFilePaths.concat(filePaths);
 		} catch (ex) {
-			const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
-			errors.push(`Error reading folder ${folder}: ${errMsg}`);
+			captureError(ex, `Error reading folder ${folder}`);
 		}
 	}
 
@@ -136,8 +136,7 @@ const createPackageXmlContent = (
 			)
 			.replace(' standalone="yes"', '');
 	} catch (ex) {
-		const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
-		errors.push(`Error creating package.xml: ${errMsg}`);
+		captureError(ex, 'Error creating package.xml');
 	}
 
 	return xml;
@@ -190,9 +189,15 @@ const commit = async () => {
 		// Push changes
 		await exec.exec('git', ['push']);
 	} catch (ex) {
-		const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
-		errors.push(`Error committing changes: ${errMsg}`);
+		captureError(ex, 'Error committing changes');
 	}
+};
+
+const captureError = (ex: unknown, detailedPrefix?: string) => {
+	const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
+	errors.push(
+		detailedPrefix ? `${detailedPrefix}: ${errMsg}` : `Error: ${errMsg}`,
+	);
 };
 
 const run = async (contentDir: string, indexFile: string): Promise<void> => {
@@ -252,9 +257,6 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 };
 
 (async () => {
-	core.info('GITHUB_WORKSPACE: ' + GITHUB_WORKSPACE);
-	core.info('INDEX_FILE: ' + INDEX_FILE);
-	core.info('CONTENT_DIR: ' + CONTENT_DIR);
 	await run(CONTENT_DIR, INDEX_FILE);
 	if (errors.length) {
 		core.setFailed(errors.join('\n'));
