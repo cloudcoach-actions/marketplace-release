@@ -10,12 +10,12 @@ import {
 	SalesforcePackageXmlType,
 } from './models/marketplace.models';
 
-const contentDir = path.join(__dirname, 'content');
-const indexFile = path.join(__dirname, 'index.json');
-const gitHubWorkspace = process.env.GITHUB_WORKSPACE;
+const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
+const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
+const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
+const IGNORED_FOLDERS: string[] = ['dist'];
+const IGNORED_FILENAMES: string[] = ['.DS_Store'];
 
-const ignoredFolders: string[] = ['dist'];
-const ignoredFileNames: string[] = ['.DS_Store'];
 const errors: string[] = [];
 
 /**
@@ -88,7 +88,7 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
 	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
 	return entries
 		.filter(
-			entry => entry.isDirectory() && !ignoredFolders.includes(entry.name),
+			entry => entry.isDirectory() && !IGNORED_FOLDERS.includes(entry.name),
 		)
 		.map(entry => path.join(directory, entry.name));
 };
@@ -97,7 +97,7 @@ const getFiles = async (directory: string): Promise<string[]> => {
 	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
 	return entries
 		.filter(
-			entry => !entry.isDirectory() && !ignoredFileNames.includes(entry.name),
+			entry => !entry.isDirectory() && !IGNORED_FILENAMES.includes(entry.name),
 		)
 		.map(entry => path.join(directory, entry.name));
 };
@@ -209,10 +209,10 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 };
 
 (async () => {
-	core.info('contentDir: ' + contentDir);
-	core.info('indexFile: ' + indexFile);
-	core.info('gitHubWorkspace: ' + gitHubWorkspace);
-	await run(contentDir, indexFile);
+	core.info('GITHUB_WORKSPACE: ' + GITHUB_WORKSPACE);
+	core.info('INDEX_FILE: ' + INDEX_FILE);
+	core.info('CONTENT_DIR: ' + CONTENT_DIR);
+	await run(CONTENT_DIR, INDEX_FILE);
 	if (errors.length) {
 		core.setFailed(errors.join('\n'));
 	}
