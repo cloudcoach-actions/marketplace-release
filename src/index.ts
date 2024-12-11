@@ -16,8 +16,12 @@ const GITHUB_TRIGGERING_ACTOR: string = process.env.GITHUB_TRIGGERING_ACTOR!;
 const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
 const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
-const IGNORED_FOLDERS: string[] = ['dist'];
-const IGNORED_FILENAMES: string[] = ['.DS_Store'];
+const IGNORED_DIRECTORY_CONTENT = [
+	'dist',
+	'.DS_Store',
+	'package.xml',
+	'info.json',
+];
 
 const errors: string[] = [];
 
@@ -80,7 +84,7 @@ const zipFolder = async (sourceDir: string, outPath: string): Promise<void> => {
 		// Append files from the source directory, excluding the 'dist' folder
 		archive.glob('**/*', {
 			cwd: sourceDir,
-			ignore: ['dist/**'],
+			ignore: ['dist/**', 'info.json'],
 		});
 
 		archive.finalize();
@@ -91,18 +95,22 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
 	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
 	return entries
 		.filter(
-			entry => entry.isDirectory() && !IGNORED_FOLDERS.includes(entry.name),
+			entry =>
+				entry.isDirectory() && !IGNORED_DIRECTORY_CONTENT.includes(entry.name),
 		)
 		.map(entry => path.join(directory, entry.name));
 };
 
-const getFiles = async (directory: string): Promise<string[]> => {
-	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
-	return entries
-		.filter(
-			entry => !entry.isDirectory() && !IGNORED_FILENAMES.includes(entry.name),
-		)
-		.map(entry => path.join(directory, entry.name));
+const parseFilePaths = (filesPaths: string[]): string[] => {
+	const filteredPaths = filesPaths.filter(filePath => {
+		const fileName = path.basename(filePath);
+		return (
+			/\.[^\/]+$/.test(fileName) &&
+			!IGNORED_DIRECTORY_CONTENT.some(ignored => filePath.includes(ignored))
+		);
+	});
+
+	return filteredPaths;
 };
 
 const createPackageXmlContent = (
@@ -226,7 +234,9 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			label: parsed.label,
 			description: parsed.description,
 			version: parsed.version,
-			files: files.map(file => path.relative(featurePath, file)),
+			files: parseFilePaths(files).map(file =>
+				path.relative(featurePath, file),
+			),
 		});
 
 		// Create the package.xml file
