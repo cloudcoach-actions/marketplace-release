@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import * as exec from '@actions/exec';
 import archiver from 'archiver';
 import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
@@ -10,6 +11,7 @@ import {
 	SalesforcePackageXmlType,
 } from './models/marketplace.models';
 
+const GITHUB_TRIGGERING_ACTOR: string = process.env.GITHUB_TRIGGERING_ACTOR!;
 const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
 const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
@@ -39,8 +41,9 @@ const getFolderStructure = async (folderPaths: string[]) => {
 			// Convert relative paths to absolute paths
 			const filePaths = files.map(file => path.resolve(folder, file));
 			allFilePaths = allFilePaths.concat(filePaths);
-		} catch (error) {
-			console.error(`Error reading folder: ${folder}`, error);
+		} catch (ex) {
+			const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
+			errors.push(`Error reading folder ${folder}: ${errMsg}`);
 		}
 	}
 
@@ -158,6 +161,40 @@ const createPackageXml = async (featurePath: string): Promise<string> => {
 	return Promise.resolve(createPackageXmlContent(types, '62.0'));
 };
 
+const commit = async () => {
+	try {
+		// Configure git
+		await exec.exec('git', [
+			'config',
+			'--global',
+			'user.name',
+			GITHUB_TRIGGERING_ACTOR,
+		]);
+		await exec.exec('git', [
+			'config',
+			'--global',
+			'user.email',
+			'integration@cloudcoach.com',
+		]);
+
+		// Add changes
+		await exec.exec('git', ['add', '.']);
+
+		// Commit changes
+		await exec.exec('git', [
+			'commit',
+			'-m',
+			'[chore]: Automated commit from Marketplace Release Action',
+		]);
+
+		// Push changes
+		await exec.exec('git', ['push']);
+	} catch (ex) {
+		const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
+		errors.push(`Error committing changes: ${errMsg}`);
+	}
+};
+
 const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	// Get a list of each of the child folders under features
 	const features = await fsPromises.readdir(contentDir);
@@ -209,6 +246,9 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 
 	// Write the updated index.json file
 	await fsPromises.writeFile(indexFile, JSON.stringify(info, null, 2));
+
+	// Commit the changes generated in the action to the repository
+	await commit();
 };
 
 (async () => {
