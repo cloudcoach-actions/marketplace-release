@@ -10,6 +10,8 @@ export interface Feature {
 	description: string;
 	version: string;
 	files: string[];
+	installZipFilePath: string;
+	uninstallZipFilePath: string;
 }
 
 export interface IndexData {

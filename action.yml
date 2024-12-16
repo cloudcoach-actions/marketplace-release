@@ -1,5 +1,18 @@
 name: Marketplace Release Action
 description: Performs a set of actions to support releases of feature marketplace code
+inputs:
+  api-version:
+    description: 'The Salesforce API version to use when creating packages'
+    required: false
+    default: '62.0'
+  github-token:
+    description: 'Access token for the org'
+    required: true
+    default: ${{ github.token }}
+  release-version:
+    description: 'Version for the release'
+    required: true
+    default: 'v1.0.0'
 runs:
   using: 'node20'
   main: 'dist/index.js'

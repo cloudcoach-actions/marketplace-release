@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
+import * as github from '@actions/github';
 import archiver from 'archiver';
 import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
@@ -11,19 +12,29 @@ import {
 	SalesforcePackageXmlType,
 } from './models/marketplace.models';
 
-// Constants
+// Action inputs
+const API_VERSION = core.getInput('api-version');
+const GITHUB_TOKEN: string = core.getInput('github-token', { required: true });
+const RELEASE_VERSION: string = core.getInput('release-version', {
+	required: true,
+});
+
+// Environment variables
 const GITHUB_TRIGGERING_ACTOR: string = process.env.GITHUB_TRIGGERING_ACTOR!;
 const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
+
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
 const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
 const IGNORED_DIRECTORY_CONTENT = [
 	'dist',
 	'.DS_Store',
 	'package.xml',
+	'destructiveChanges.xml',
 	'info.json',
 ];
 
 const errors: string[] = [];
+const octokit = github.getOctokit(GITHUB_TOKEN);
 
 /**
  * Read all files from the given folders and their subfolders using fs.readdir's
@@ -115,7 +126,7 @@ const parseFilePaths = (filesPaths: string[]): string[] => {
 
 const createPackageXmlContent = (
 	types: SalesforcePackageXmlType,
-	version: string,
+	version?: string,
 ) => {
 	let xml: string = '';
 	try {
@@ -124,7 +135,7 @@ const createPackageXmlContent = (
 		const packObj = {
 			Package: {
 				types: mappedTypes,
-				version,
+				...(version ? { version } : {}),
 			},
 		};
 
@@ -150,8 +161,38 @@ const createPackageXmlContent = (
 	return xml;
 };
 
-const createPackageXml = async (featurePath: string): Promise<string> => {
+const createEmptyPackageXmlContent = (version: string): string => {
+	let xml: string = '';
+	try {
+		const builder = new Builder();
+		const packObj = {
+			Package: { version },
+		};
+
+		xml = builder
+			.buildObject(packObj)
+			.replace(
+				'<Package>',
+				'<Package xmlns="http://soap.sforce.com/2006/04/metadata">',
+			)
+			.replace(' standalone="yes"', '');
+	} catch (ex) {
+		captureError(ex, 'Error creating empty package.xml');
+	}
+
+	return xml;
+};
+
+const createPackageXml = async (
+	featurePath: string,
+	destructive = false,
+): Promise<void> => {
 	const folders = await getSubdirectories(featurePath);
+	const packageXmlPath = path.join(featurePath, 'package.xml');
+	const destructiveChangesXmlPath = path.join(
+		featurePath,
+		'destructiveChanges.xml',
+	);
 
 	const types: SalesforcePackageXmlType = {};
 	for (const folder of folders) {
@@ -159,13 +200,46 @@ const createPackageXml = async (featurePath: string): Promise<string> => {
 		if (metadataTypeFolderMappings[baseName]) {
 			// Read files and folders (hence using 'entries' convention)
 			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
-			types[metadataTypeFolderMappings[baseName]] = entries.map(
-				entry => path.parse(entry.name).name,
-			);
+			types[metadataTypeFolderMappings[baseName]] = entries
+				.filter(entry => !entry.name.endsWith('-meta.xml'))
+				.map(entry => path.parse(entry.name).name);
 		}
 	}
 
-	return Promise.resolve(createPackageXmlContent(types, '62.0'));
+	if (destructive) {
+		const emptyPackageXml = createEmptyPackageXmlContent(API_VERSION);
+		await fsPromises.writeFile(packageXmlPath, emptyPackageXml);
+		const destructiveChangesXml = createPackageXmlContent(types);
+		await fsPromises.writeFile(
+			destructiveChangesXmlPath,
+			destructiveChangesXml,
+		);
+	} else {
+		const packageXml = createPackageXmlContent(types, API_VERSION);
+		await fsPromises.writeFile(packageXmlPath, packageXml);
+	}
+};
+
+const hasPendingChanges = async (): Promise<boolean> => {
+	let hasChanges = false;
+	let output = '';
+
+	const options = {
+		listeners: {
+			stdout: (data: Buffer) => {
+				output += data.toString();
+			},
+		},
+	};
+
+	try {
+		await exec.exec('git', ['status', '--porcelain'], options);
+		hasChanges = output.trim().length > 0;
+	} catch (ex) {
+		captureError(ex, 'Error checking for pending changes');
+	}
+
+	return hasChanges;
 };
 
 const commit = async () => {
@@ -175,13 +249,13 @@ const commit = async () => {
 			'config',
 			'--global',
 			'user.name',
-			GITHUB_TRIGGERING_ACTOR,
+			'github-actions[bot]',
 		]);
 		await exec.exec('git', [
 			'config',
 			'--global',
 			'user.email',
-			'integration@cloudcoach.com',
+			'github-actions[bot]@users.noreply.github.com',
 		]);
 
 		// Add changes
@@ -191,7 +265,7 @@ const commit = async () => {
 		await exec.exec('git', [
 			'commit',
 			'-m',
-			'[chore]: Automated commit from Marketplace Release Action',
+			`[ci]: Automated commit from Marketplace Release Action (triggered by @${GITHUB_TRIGGERING_ACTOR})`,
 		]);
 
 		// Push changes
@@ -208,6 +282,122 @@ const captureError = (ex: unknown, detailedPrefix?: string) => {
 	);
 };
 
+const createInstallationZip = async (featurePath: string): Promise<string> => {
+	const distPath = path.join(featurePath, 'dist');
+	const basename = path.basename(featurePath);
+	const packageXmlPath = path.join(featurePath, 'package.xml');
+	const installZipPath = path.join(
+		featurePath,
+		'dist',
+		`${basename}-install.zip`,
+	);
+
+	// Create the package.xml file
+	await createPackageXml(featurePath);
+
+	// Ensure the dist folder exists
+	await fsPromises.mkdir(distPath, { recursive: true });
+
+	// Zip the contents of the feature folder (including package.xml) and save
+	// it to the dist folder
+	await zipFolder(featurePath, installZipPath);
+
+	// Remove the temporary package.xml file
+	await deleteFile(packageXmlPath);
+
+	return installZipPath;
+};
+
+const fileExists = async (filePath: string): Promise<boolean> =>
+	fs.promises
+		.access(filePath, fs.constants.F_OK)
+		.then(() => true)
+		.catch(() => false);
+
+const deleteFile = async (filePath: string): Promise<void> => {
+	try {
+		await exec.exec('rm', [filePath]);
+		core.info(`File removed: ${filePath}`);
+	} catch (error) {
+		captureError(error, `Error removing file: ${filePath}`);
+	}
+};
+
+const createUninstallZip = async (featurePath: string): Promise<string> => {
+	const distPath = path.join(featurePath, 'dist');
+	const basename = path.basename(featurePath);
+	const destructiveChangesXmlPath = path.join(
+		featurePath,
+		'destructiveChanges.xml',
+	);
+	const packageXmlPath = path.join(featurePath, 'package.xml');
+	const uninstallZipPath = path.join(
+		featurePath,
+		'dist',
+		`${basename}-uninstall.zip`,
+	);
+
+	// Ensure the dist folder exists
+	await fsPromises.mkdir(distPath, { recursive: true });
+
+	// Create the package.xml and destructiveChanges.xml files
+	await createPackageXml(featurePath, true);
+
+	// Create a zip file containing just the package.xml and
+	// destructiveChanges.xml files
+	const output = fs.createWriteStream(
+		path.join(distPath, `${basename}-uninstall.zip`),
+	);
+	const archive = archiver('zip', {
+		zlib: { level: 9 }, // Sets the compression level
+	});
+
+	const zipPromise$ = new Promise<string>((resolve, reject) => {
+		output.on('close', () => {
+			console.log(
+				`Archive created successfully, total bytes: ${archive.pointer()}`,
+			);
+			resolve(uninstallZipPath);
+		});
+
+		archive.on('error', err => {
+			reject(err);
+		});
+
+		archive.pipe(output);
+
+		// Append the package.xml and destructiveChanges.xml files to the archive
+		archive.file(path.join(featurePath, 'package.xml'), {
+			name: 'package.xml',
+		});
+		archive.file(path.join(featurePath, 'destructiveChanges.xml'), {
+			name: 'destructiveChanges.xml',
+		});
+
+		archive.finalize();
+	});
+
+	await zipPromise$;
+
+	// Remove the temporary xml files
+	await deleteFile(packageXmlPath);
+	await deleteFile(destructiveChangesXmlPath);
+
+	return uninstallZipPath;
+};
+
+const createZipFileRequestUrl = (
+	owner: string,
+	repo: string,
+	feature: string,
+	uninstall = false,
+) => {
+	const zipFile = uninstall
+		? `${feature}-uninstall.zip`
+		: `${feature}-install.zip`;
+	return `https://api.github.com/repos/${owner}/${repo}/contents/content/${feature}/dist/${zipFile}`;
+};
+
 const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	// Get a list of each of the child folders under features
 	const features = await fsPromises.readdir(contentDir);
@@ -217,16 +407,29 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		features: [],
 	};
 
-	// features.forEach(async folder => {
+	// Get the owner and repo from the context
+	const { owner, repo } = github.context.repo;
+
+	// Optionally keeping track of created zip files for later use
+	const installZipPaths: string[] = [];
+	const uninstallZipPaths: string[] = [];
+
 	for (const folder of features) {
 		const featurePath = path.join(contentDir, folder);
-		// Read the existing info.json file. We'll need to update this with the files
+		// Read the existing info.json file from the feature folder. We'll need
+		// this to build the info.json
 		const featureInfo = await fsPromises.readFile(
 			path.join(featurePath, 'info.json'),
 			'utf8',
 		);
 		const parsed = JSON.parse(featureInfo);
 		const files = await getFolderStructure([featurePath]);
+
+		const installZipPath = await createInstallationZip(featurePath);
+		const uninstallZipPath = await createUninstallZip(featurePath);
+
+		installZipPaths.push(installZipPath);
+		uninstallZipPaths.push(uninstallZipPath);
 
 		info.features.push({
 			id: parsed.id,
@@ -237,33 +440,50 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			files: parseFilePaths(files).map(file =>
 				path.relative(featurePath, file),
 			),
+			installZipFilePath: createZipFileRequestUrl(owner, repo, folder),
+			uninstallZipFilePath: createZipFileRequestUrl(owner, repo, folder, true),
 		});
-
-		// Create the package.xml file
-		const packageXml = await createPackageXml(featurePath);
-		core.info(`packageXml: ${packageXml}`);
-		const packageXmlPath = path.join(featurePath, 'package.xml');
-		await fsPromises.writeFile(packageXmlPath, packageXml);
-
-		// Ensure the dist folder exists
-		const distPath = path.join(featurePath, 'dist');
-		await fsPromises.mkdir(distPath, { recursive: true });
-
-		// Zip the contents of the feature folder (including package.xml) and save
-		// it to the dist folder
-		await zipFolder(
-			featurePath,
-			path.join(featurePath, 'dist', `${folder}.zip`),
-		);
 	}
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));
 
+	const response = await octokit.rest.repos.createRelease({
+		...github.context.repo,
+		tag_name: RELEASE_VERSION,
+		name: RELEASE_VERSION,
+		body: `Automated release for version ${RELEASE_VERSION}`,
+	});
+
+	const releaseId = response.data.id;
+	const releaseUrl = response.data.html_url;
+	core.info(`Release created: ${releaseUrl}`);
+	core.info(`Release ID: ${releaseId}`);
+
+	for (const installZipPath of installZipPaths) {
+		const absolutePath = path.resolve(installZipPath);
+		const fileName = path.basename(absolutePath);
+		const fileData = await fsPromises.readFile(absolutePath, 'utf8');
+
+		console.log(`Attaching file: ${fileName}`);
+		await octokit.rest.repos.uploadReleaseAsset({
+			owner: github.context.repo.owner,
+			repo: github.context.repo.repo,
+			release_id: releaseId,
+			name: fileName,
+			data: fileData,
+		});
+	}
+
 	// Write the updated index.json file
 	await fsPromises.writeFile(indexFile, JSON.stringify(info, null, 2));
 
-	// Commit the changes generated in the action to the repository
-	await commit();
+	const hasChanges = await hasPendingChanges();
+	if (hasChanges) {
+		// Commit the changes generated in the action to the repository
+		await commit();
+	} else {
+		core.info('No changes to commit');
+	}
 };
 
 (async () => {
