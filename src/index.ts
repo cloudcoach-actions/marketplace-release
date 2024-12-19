@@ -460,10 +460,13 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 
 	for (const zipPath of zipPaths) {
 		const absolutePath = path.resolve(zipPath);
+		core.info(`Uploading file: ${absolutePath}`);
 		const fileName = path.basename(absolutePath);
+		core.info(`File name: ${fileName}`);
 		// const fileData = await fsPromises.readFile(absolutePath, 'utf8');
 		const fileStat = fs.statSync(absolutePath);
-    const fileContent = fs.readFileSync(absolutePath, 'utf8');
+		core.info(`File size: ${fileStat.size}`);
+    const fileContent = fs.readFileSync(absolutePath);
 
 		console.log(`Attaching file: ${fileName}`);
 		await octokit.rest.repos.uploadReleaseAsset({
@@ -471,7 +474,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			repo: github.context.repo.repo,
 			release_id: releaseId,
 			name: fileName,
-			data: fileContent,
+			data: fileContent as any,
 			headers: {
 				'content-type': 'application/zip',
 				'content-length': fileStat.size,
