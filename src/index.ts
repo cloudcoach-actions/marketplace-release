@@ -410,9 +410,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	// Get the owner and repo from the context
 	const { owner, repo } = github.context.repo;
 
-	// Optionally keeping track of created zip files for later use
-	const installZipPaths: string[] = [];
-	const uninstallZipPaths: string[] = [];
+	// Keep track of created zip file paths for later use
+	const zipPaths: string[] = [];
 
 	for (const folder of features) {
 		const featurePath = path.join(contentDir, folder);
@@ -428,8 +427,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		const installZipPath = await createInstallationZip(featurePath);
 		const uninstallZipPath = await createUninstallZip(featurePath);
 
-		installZipPaths.push(installZipPath);
-		uninstallZipPaths.push(uninstallZipPath);
+		zipPaths.push(installZipPath);
+		zipPaths.push(uninstallZipPath);
 
 		info.features.push({
 			id: parsed.id,
@@ -459,8 +458,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	core.info(`Release created: ${releaseUrl}`);
 	core.info(`Release ID: ${releaseId}`);
 
-	for (const installZipPath of installZipPaths) {
-		const absolutePath = path.resolve(installZipPath);
+	for (const zipPath of zipPaths) {
+		const absolutePath = path.resolve(zipPath);
 		const fileName = path.basename(absolutePath);
 		const fileData = await fsPromises.readFile(absolutePath, 'utf8');
 
