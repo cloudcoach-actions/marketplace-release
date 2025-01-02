@@ -472,6 +472,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			files: parseFilePaths(files).map(file =>
 				path.relative(featurePath, file),
 			),
+			iconUrl: parsed.iconUrl,
 		});
 	}
 

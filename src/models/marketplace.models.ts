@@ -9,6 +9,7 @@ export interface Feature {
 	description: string;
 	version: string;
 	files: string[];
+	iconUrl?: string;
 }
 
 export interface IndexData {
