@@ -494,7 +494,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	}
 
 	// Write the updated index.json file
-	await fsPromises.writeFile(indexFile, JSON.stringify(info, null, 2));
+	await fsPromises.writeFile(indexFile, JSON.stringify(info));
 
 	// Upload the index.json file as a release asset
 	await uploadReleaseAsset(releaseId, indexFile, 'application/json');
