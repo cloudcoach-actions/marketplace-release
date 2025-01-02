@@ -398,6 +398,32 @@ const createZipFileRequestUrl = (
 	return `https://api.github.com/repos/${owner}/${repo}/contents/content/${feature}/dist/${zipFile}`;
 };
 
+const uploadReleaseAsset = async (
+	releaseId: number,
+	assetPath: string,
+	contentType: string,
+) => {
+	const absolutePath = path.resolve(assetPath);
+	const fileName = path.basename(absolutePath);
+	const fileStat = await fsPromises.stat(absolutePath);
+	const fileContent = await fsPromises.readFile(absolutePath);
+
+	// Note: If the content length is not specified when uploading a zip as a
+	// release asset, the file will be corrupted.
+	core.info(`Attaching file: ${fileName}`);
+	await octokit.rest.repos.uploadReleaseAsset({
+		owner: github.context.repo.owner,
+		repo: github.context.repo.repo,
+		release_id: releaseId,
+		name: fileName,
+		data: fileContent as any,
+		headers: {
+			'content-type': contentType,
+			'content-length': fileStat.size,
+		},
+	});
+};
+
 const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	// Get a list of each of the child folders under features
 	const features = await fsPromises.readdir(contentDir);
@@ -459,7 +485,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	core.info(`Release ID: ${releaseId}`);
 
 	for (const zipPath of zipPaths) {
-		const absolutePath = path.resolve(zipPath);
+		await uploadReleaseAsset(releaseId, zipPath, 'application/zip');
+		/* const absolutePath = path.resolve(zipPath);
 		const fileName = path.basename(absolutePath);
 		const fileStat = await fsPromises.stat(absolutePath);
 		const fileContent = await fsPromises.readFile(absolutePath);
@@ -477,19 +504,22 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 				'content-type': 'application/zip',
 				'content-length': fileStat.size,
 			},
-		});
+		}); */
 	}
 
 	// Write the updated index.json file
-	await fsPromises.writeFile(indexFile, JSON.stringify(info, null, 2));
+	// await fsPromises.writeFile(indexFile, JSON.stringify(info, null, 2));
 
-	const hasChanges = await hasPendingChanges();
+	// Upload the index.json file as a release asset
+	await uploadReleaseAsset(releaseId, indexFile, 'application/json');
+
+	/* const hasChanges = await hasPendingChanges();
 	if (hasChanges) {
 		// Commit the changes generated in the action to the repository
 		await commit();
 	} else {
 		core.info('No changes to commit');
-	}
+	} */
 };
 
 (async () => {
