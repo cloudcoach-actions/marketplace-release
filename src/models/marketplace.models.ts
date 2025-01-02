@@ -4,14 +4,11 @@ export interface FileMetadata {
 }
 
 export interface Feature {
-	id: string;
 	name: string;
 	label: string;
 	description: string;
 	version: string;
 	files: string[];
-	installZipFilePath: string;
-	uninstallZipFilePath: string;
 }
 
 export interface IndexData {

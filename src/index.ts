@@ -450,7 +450,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	for (const folder of features) {
 		const featurePath = path.join(contentDir, folder);
 		// Read the existing info.json file from the feature folder. We'll need
-		// this to build the info.json
+		// this to build the index.json
 		const featureInfo = await fsPromises.readFile(
 			path.join(featurePath, 'info.json'),
 			'utf8',
@@ -465,7 +465,6 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		zipPaths.push(uninstallZipPath);
 
 		info.features.push({
-			id: parsed.id,
 			name: folder,
 			label: parsed.label,
 			description: parsed.description,
@@ -473,8 +472,6 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			files: parseFilePaths(files).map(file =>
 				path.relative(featurePath, file),
 			),
-			installZipFilePath: createZipFileRequestUrl(owner, repo, folder),
-			uninstallZipFilePath: createZipFileRequestUrl(owner, repo, folder, true),
 		});
 	}
 
