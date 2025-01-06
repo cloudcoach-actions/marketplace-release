@@ -468,7 +468,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			name: folder,
 			label: parsed.label,
 			description: parsed.description,
-			version: parsed.version,
+			version: RELEASE_VERSION,
 			files: parseFilePaths(files).map(file =>
 				path.relative(featurePath, file),
 			),
