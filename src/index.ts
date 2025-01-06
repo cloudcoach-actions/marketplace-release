@@ -148,7 +148,9 @@ const createPackageXmlContent = (
 			});
 		});
 
-		core.info('createPackageXmlContent packObj: ' + JSON.stringify(packObj, null, 2));
+		core.info(
+			'createPackageXmlContent packObj: ' + JSON.stringify(packObj, null, 2),
+		);
 
 		xml = builder
 			.buildObject(packObj)
@@ -203,9 +205,9 @@ const createPackageXml = async (
 		if (metadataTypeFolderMappings[baseName]) {
 			// Read files and folders (hence using 'entries' convention)
 			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
-			types[metadataTypeFolderMappings[baseName]] = entries.map(
-				entry => path.parse(entry.name).name,
-			);
+			types[metadataTypeFolderMappings[baseName]] = entries
+				.filter(entry => !entry.name.endsWith('-meta.xml'))
+				.map(entry => path.parse(entry.name).name);
 		}
 	}
 
