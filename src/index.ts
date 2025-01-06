@@ -201,7 +201,11 @@ const createPackageXml = async (
 			// Read files and folders (hence using 'entries' convention)
 			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
 			types[metadataTypeFolderMappings[baseName]] = entries
-				.filter(entry => !entry.name.endsWith('-meta.xml'))
+				.filter(entry => {
+					core.info(`Entry name: ${entry.name}`);
+					core.info(`endsWith -meta.xml?: ${entry.name.endsWith('-meta.xml')}`);
+					return !entry.name.endsWith('-meta.xml');
+				})
 				.map(entry => path.parse(entry.name).name);
 		}
 	}
@@ -473,6 +477,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 				path.relative(featurePath, file),
 			),
 			iconUrl: parsed.iconUrl,
+			dependencies: parsed.dependencies || [],
 		});
 	}
 

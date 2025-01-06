@@ -10,6 +10,7 @@ export interface Feature {
 	version: string;
 	files: string[];
 	iconUrl?: string;
+	dependencies?: string[];
 }
 
 export interface IndexData {
