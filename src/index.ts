@@ -200,13 +200,9 @@ const createPackageXml = async (
 		if (metadataTypeFolderMappings[baseName]) {
 			// Read files and folders (hence using 'entries' convention)
 			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
-			types[metadataTypeFolderMappings[baseName]] = entries
-				.filter(entry => {
-					core.info(`Entry name: ${entry.name}`);
-					core.info(`endsWith -meta.xml?: ${entry.name.endsWith('-meta.xml')}`);
-					return !entry.name.endsWith('-meta.xml');
-				})
-				.map(entry => path.parse(entry.name).name);
+			types[metadataTypeFolderMappings[baseName]] = entries.map(
+				entry => path.parse(entry.name).name,
+			);
 		}
 	}
 
@@ -473,9 +469,9 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			label: parsed.label,
 			description: parsed.description,
 			version: RELEASE_VERSION,
-			files: parseFilePaths(files).map(file =>
-				path.relative(featurePath, file),
-			),
+			files: parseFilePaths(files)
+				.filter(file => !file.endsWith('-meta.xml'))
+				.map(file => path.relative(featurePath, file)),
 			iconUrl: parsed.iconUrl,
 			dependencies: parsed.dependencies || [],
 		});
