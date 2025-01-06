@@ -128,6 +128,7 @@ const createPackageXmlContent = (
 	types: SalesforcePackageXmlType,
 	version?: string,
 ) => {
+	core.info('createPackageXmlContent types: ' + JSON.stringify(types, null, 2));
 	let xml: string = '';
 	try {
 		const builder = new Builder();
@@ -146,6 +147,8 @@ const createPackageXmlContent = (
 				name,
 			});
 		});
+
+		core.info('createPackageXmlContent packObj: ' + JSON.stringify(packObj, null, 2));
 
 		xml = builder
 			.buildObject(packObj)
