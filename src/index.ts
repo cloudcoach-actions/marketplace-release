@@ -257,6 +257,19 @@ const createPackageXmlWithCli = async (
 
 	// write this file to the root of the project
 	await fsPromises.writeFile(SFDX_PROJECT_JSON_FILE, JSON.stringify(sfdxProjectJson));
+
+	try {
+		// Configure git
+		await exec.exec('sf', [
+			'project',
+			'convert',
+			'source',
+			'-d ' + path.join(featurePath, 'package'),
+		]);
+		core.info('Converted source to metadata format');
+	} catch (ex) {
+		captureError(ex, `Error running 'sf project convert source' command`);
+	}
 };
 
 const hasPendingChanges = async (): Promise<boolean> => {
@@ -331,6 +344,7 @@ const captureError = (ex: unknown, detailedPrefix?: string) => {
 
 const createInstallationZip = async (featurePath: string): Promise<string> => {
 	const distPath = path.join(featurePath, 'dist');
+	const packagePath = path.join(featurePath, 'package');
 	const basename = path.basename(featurePath);
 	const packageXmlPath = path.join(featurePath, 'package.xml');
 	const installZipPath = path.join(
@@ -520,7 +534,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));
 
-	const response = await octokit.rest.repos.createRelease({
+	// Temporarily disabled while setting up SF cli
+	/* const response = await octokit.rest.repos.createRelease({
 		...github.context.repo,
 		tag_name: RELEASE_VERSION,
 		name: RELEASE_VERSION,
@@ -548,7 +563,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		await discardTempFileChanges();
 	} else {
 		core.info('No changes to commit');
-	}
+	} */
 };
 
 (async () => {
