@@ -248,8 +248,13 @@ const createPackageXmlWithCli = async (
 ): Promise<void> => {
 	console.log(featurePath);
 
+	const featurePathSegments = featurePath.split(path.sep);
+	const packageDirectoryPath = featurePathSegments.slice(-2).join(path.sep);
+	const outputDir = path.join(packageDirectoryPath, 'package');
+	core.info('outputDir: ' + outputDir);
+
 	const sfdxProjectJson = {
-		packageDirectories: [{ path: featurePath, default: true }],
+		packageDirectories: [{ path: packageDirectoryPath, default: true }],
 		sfdcLoginUrl: 'https://login.salesforce.com',
 		sourceApiVersion: API_VERSION,
 	};
@@ -259,10 +264,6 @@ const createPackageXmlWithCli = async (
 	await fsPromises.writeFile(SFDX_PROJECT_JSON_FILE, JSON.stringify(sfdxProjectJson));
 
 	try {
-		const featurePathSegments = featurePath.split(path.sep);
-		const outputDir = featurePathSegments.slice(-2).join(path.sep);
-		core.info('outputDir: ' + outputDir);
-
 		// Configure git
 		await exec.exec('sf', [
 			'project',
