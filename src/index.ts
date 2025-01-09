@@ -36,6 +36,8 @@ const IGNORED_DIRECTORY_CONTENT = [
 const errors: string[] = [];
 const octokit = github.getOctokit(GITHUB_TOKEN);
 
+console.log(metadataTypeFolderMappings);
+
 /**
  * Read all files from the given folders and their subfolders using fs.readdir's
  * recursive option.
