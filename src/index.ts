@@ -25,6 +25,7 @@ const GITHUB_TRIGGERING_ACTOR: string = process.env.GITHUB_TRIGGERING_ACTOR!;
 const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
+const SFDX_PROJECT_JSON_FILE: string = path.join(GITHUB_WORKSPACE, 'sfdx-project.json');
 const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
 const IGNORED_DIRECTORY_CONTENT = [
 	'dist',
@@ -37,6 +38,10 @@ const IGNORED_DIRECTORY_CONTENT = [
 const errors: string[] = [];
 const octokit = github.getOctokit(GITHUB_TOKEN);
 
+/**
+ * Local metadata folder mappings primarily used for comparing folder names
+ * using lower case keys.
+ */
 const folderMappings: Record<
 	string,
 	SalesforceMetadataType
@@ -44,7 +49,6 @@ const folderMappings: Record<
 	acc[key.toLowerCase()] = metadataTypeFolderMappings[key];
 	return acc;
 }, {} as Record<string, SalesforceMetadataType>);
-console.log(folderMappings);
 
 /**
  * Read all files from the given folders and their subfolders using fs.readdir's
@@ -198,6 +202,9 @@ const createEmptyPackageXmlContent = (version: string): string => {
 	return xml;
 };
 
+/**
+ * @deprecated Use createPackageXmlWithCli instead
+ */
 const createPackageXml = async (
 	featurePath: string,
 	destructive = false,
@@ -212,7 +219,6 @@ const createPackageXml = async (
 	const types: SalesforcePackageXmlType = {};
 	for (const folder of folders) {
 		const baseName = path.basename(folder).toLowerCase();
-		// if (metadataTypeFolderMappings[baseName]) {
 		if (folderMappings[baseName]) {
 			// Read files and folders (hence using 'entries' convention)
 			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
@@ -234,6 +240,23 @@ const createPackageXml = async (
 		const packageXml = createPackageXmlContent(types, API_VERSION);
 		await fsPromises.writeFile(packageXmlPath, packageXml);
 	}
+};
+
+const createPackageXmlWithCli = async (
+	featurePath: string,
+	destructive = false,
+): Promise<void> => {
+	console.log(featurePath);
+
+	const sfdxProjectJson = {
+		packageDirectories: [{ path: featurePath, default: true }],
+		sfdcLoginUrl: 'https://login.salesforce.com',
+		sourceApiVersion: API_VERSION,
+	};
+	console.log(sfdxProjectJson);
+
+	// write this file to the root of the project
+	await fsPromises.writeFile(SFDX_PROJECT_JSON_FILE, JSON.stringify(sfdxProjectJson));
 };
 
 const hasPendingChanges = async (): Promise<boolean> => {
@@ -317,7 +340,9 @@ const createInstallationZip = async (featurePath: string): Promise<string> => {
 	);
 
 	// Create the package.xml file
-	await createPackageXml(featurePath);
+	// await createPackageXml(featurePath);
+
+	await createPackageXmlWithCli(featurePath);
 
 	// Ensure the dist folder exists
 	await fsPromises.mkdir(distPath, { recursive: true });
