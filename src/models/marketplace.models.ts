@@ -128,7 +128,7 @@ export type SalesforceMetadataType =
 	| 'WebLink'
 	| 'Workflow';
 
-export const metadataTypeFolderMappings: Record<
+const _metadataTypeFolderMappings: Record<
 	string,
 	SalesforceMetadataType
 > = {
@@ -158,3 +158,11 @@ export const metadataTypeFolderMappings: Record<
 export type SalesforcePackageXmlType = {
 	[K in keyof typeof metadataTypeFolderMappings]: string[];
 };
+
+export const metadataTypeFolderMappings: Record<
+	string,
+	SalesforceMetadataType
+> = Object.keys(_metadataTypeFolderMappings).reduce((acc, key) => {
+	acc[key.toLowerCase()] = metadataTypeFolderMappings[key];
+	return acc;
+}, {} as Record<string, SalesforceMetadataType>);

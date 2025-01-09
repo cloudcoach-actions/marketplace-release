@@ -8,6 +8,7 @@ import * as path from 'path';
 import { Builder } from 'xml2js';
 import {
 	IndexData,
+	lowerCaseMetadataTypeFolderMappings,
 	metadataTypeFolderMappings,
 	SalesforcePackageXmlType,
 } from './models/marketplace.models';
@@ -201,12 +202,13 @@ const createPackageXml = async (
 
 	const types: SalesforcePackageXmlType = {};
 	for (const folder of folders) {
-		const baseName = path.basename(folder);
+		const baseName = path.basename(folder).toLowerCase();
+		// if (metadataTypeFolderMappings[baseName]) {
 		if (metadataTypeFolderMappings[baseName]) {
 			// Read files and folders (hence using 'entries' convention)
 			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
 			types[metadataTypeFolderMappings[baseName]] = entries
-				.filter(entry => !entry.name.endsWith('-meta.xml'))
+				.filter(entry => !entry.name.endsWith('-meta.xml')) // TODO: Need to tighten up this using a regex (use just cls and trigger hard code for time being)
 				.map(entry => path.parse(entry.name).name);
 		}
 	}
@@ -476,7 +478,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			version: RELEASE_VERSION,
 			files: parseFilePaths(files)
 				.filter(file => !file.endsWith('-meta.xml'))
-				.map(file => path.relative(featurePath, file)),
+				.map(file => path.relative(featurePath, file)), // TODO: Iterate each item, add to a set and replace the -meta.xml with empty string
 			iconUrl: parsed.iconUrl,
 			dependencies: parsed.dependencies || [],
 		});
