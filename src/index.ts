@@ -9,6 +9,7 @@ import { Builder } from 'xml2js';
 import {
 	IndexData,
 	metadataTypeFolderMappings,
+	SalesforceMetadataType,
 	SalesforcePackageXmlType,
 } from './models/marketplace.models';
 
@@ -36,7 +37,14 @@ const IGNORED_DIRECTORY_CONTENT = [
 const errors: string[] = [];
 const octokit = github.getOctokit(GITHUB_TOKEN);
 
-console.log(metadataTypeFolderMappings);
+const folderMappings: Record<
+	string,
+	SalesforceMetadataType
+> = Object.keys(metadataTypeFolderMappings).reduce((acc, key) => {
+	acc[key.toLowerCase()] = metadataTypeFolderMappings[key];
+	return acc;
+}, {} as Record<string, SalesforceMetadataType>);
+console.log(folderMappings);
 
 /**
  * Read all files from the given folders and their subfolders using fs.readdir's
@@ -205,10 +213,10 @@ const createPackageXml = async (
 	for (const folder of folders) {
 		const baseName = path.basename(folder).toLowerCase();
 		// if (metadataTypeFolderMappings[baseName]) {
-		if (metadataTypeFolderMappings[baseName]) {
+		if (folderMappings[baseName]) {
 			// Read files and folders (hence using 'entries' convention)
 			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
-			types[metadataTypeFolderMappings[baseName]] = entries
+			types[folderMappings[baseName]] = entries
 				.filter(entry => !entry.name.endsWith('-meta.xml')) // TODO: Need to tighten up this using a regex (use just cls and trigger hard code for time being)
 				.map(entry => path.parse(entry.name).name);
 		}
