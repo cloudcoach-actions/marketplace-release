@@ -269,7 +269,8 @@ const createPackageXmlWithCli = async (
 			'project',
 			'convert',
 			'source',
-			'-d ' + outputDir,
+			'-d',
+			outputDir,
 		]);
 		core.info('Converted source to metadata format');
 	} catch (ex) {
