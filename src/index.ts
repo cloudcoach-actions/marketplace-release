@@ -8,7 +8,6 @@ import * as path from 'path';
 import { Builder } from 'xml2js';
 import {
 	IndexData,
-	lowerCaseMetadataTypeFolderMappings,
 	metadataTypeFolderMappings,
 	SalesforcePackageXmlType,
 } from './models/marketplace.models';
