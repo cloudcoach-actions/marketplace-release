@@ -351,7 +351,7 @@ const createInstallationZip = async (featurePath: string): Promise<string> => {
 	const distPath = path.join(featurePath, 'dist');
 	const packagePath = path.join(featurePath, 'package');
 	const basename = path.basename(featurePath);
-	const packageXmlPath = path.join(featurePath, 'package.xml');
+	// const packageXmlPath = path.join(featurePath, 'package.xml');
 	const installZipPath = path.join(
 		featurePath,
 		'dist',
@@ -368,10 +368,10 @@ const createInstallationZip = async (featurePath: string): Promise<string> => {
 
 	// Zip the contents of the feature folder (including package.xml) and save
 	// it to the dist folder
-	await zipFolder(featurePath, installZipPath);
+	await zipFolder(packagePath, installZipPath);
 
 	// Remove the temporary package.xml file
-	await deleteFile(packageXmlPath);
+	// await deleteFile(packageXmlPath);
 
 	return installZipPath;
 };
@@ -519,10 +519,10 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		const files = await getFolderStructure([featurePath]);
 
 		const installZipPath = await createInstallationZip(featurePath);
-		const uninstallZipPath = await createUninstallZip(featurePath);
+		// const uninstallZipPath = await createUninstallZip(featurePath);
 
 		zipPaths.push(installZipPath);
-		zipPaths.push(uninstallZipPath);
+		// zipPaths.push(uninstallZipPath);
 
 		info.features.push({
 			name: folder,
@@ -539,8 +539,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));
 
-	// Temporarily disabled while setting up SF cli
-	/* const response = await octokit.rest.repos.createRelease({
+	const response = await octokit.rest.repos.createRelease({
 		...github.context.repo,
 		tag_name: RELEASE_VERSION,
 		name: RELEASE_VERSION,
@@ -568,7 +567,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		await discardTempFileChanges();
 	} else {
 		core.info('No changes to commit');
-	} */
+	}
 };
 
 (async () => {
