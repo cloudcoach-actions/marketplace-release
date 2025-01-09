@@ -259,12 +259,16 @@ const createPackageXmlWithCli = async (
 	await fsPromises.writeFile(SFDX_PROJECT_JSON_FILE, JSON.stringify(sfdxProjectJson));
 
 	try {
+		const featurePathSegments = featurePath.split(path.sep);
+		const outputDir = featurePathSegments.slice(-2).join(path.sep);
+		core.info('outputDir: ' + outputDir);
+
 		// Configure git
 		await exec.exec('sf', [
 			'project',
 			'convert',
 			'source',
-			'-d ' + path.join(featurePath, 'package'),
+			'-d ' + outputDir,
 		]);
 		core.info('Converted source to metadata format');
 	} catch (ex) {
