@@ -10,7 +10,6 @@ import {
 	IndexData,
 	metadataTypeFolderMappings,
 	SalesforceMetadataType,
-	SalesforcePackageXmlType,
 } from './models/marketplace.models';
 
 // Action inputs
@@ -142,110 +141,6 @@ const parseFilePaths = (filesPaths: string[]): string[] => {
 	return filteredPaths;
 };
 
-const createPackageXmlContent = (
-	types: SalesforcePackageXmlType,
-	version?: string,
-) => {
-	core.info('createPackageXmlContent types: ' + JSON.stringify(types, null, 2));
-	let xml: string = '';
-	try {
-		const builder = new Builder();
-		const mappedTypes: Array<{ members: string[]; name: string }> = [];
-		const packObj = {
-			Package: {
-				types: mappedTypes,
-				...(version ? { version } : {}),
-			},
-		};
-
-		// Append new nodes to the Package object
-		Object.entries(types).forEach(([name, members]) => {
-			mappedTypes.push({
-				members,
-				name,
-			});
-		});
-
-		core.info(
-			'createPackageXmlContent packObj: ' + JSON.stringify(packObj, null, 2),
-		);
-
-		xml = builder
-			.buildObject(packObj)
-			.replace(
-				'<Package>',
-				'<Package xmlns="http://soap.sforce.com/2006/04/metadata">',
-			)
-			.replace(' standalone="yes"', '');
-	} catch (ex) {
-		captureError(ex, 'Error creating package.xml');
-	}
-
-	return xml;
-};
-
-const createEmptyPackageXmlContent = (version: string): string => {
-	let xml: string = '';
-	try {
-		const builder = new Builder();
-		const packObj = {
-			Package: { version },
-		};
-
-		xml = builder
-			.buildObject(packObj)
-			.replace(
-				'<Package>',
-				'<Package xmlns="http://soap.sforce.com/2006/04/metadata">',
-			)
-			.replace(' standalone="yes"', '');
-	} catch (ex) {
-		captureError(ex, 'Error creating empty package.xml');
-	}
-
-	return xml;
-};
-
-/**
- * @deprecated Use createSalesforcePackageMetadata instead
- */
-const createPackageXml = async (
-	featurePath: string,
-	destructive = false,
-): Promise<void> => {
-	const folders = await getSubdirectories(featurePath);
-	const packageXmlPath = path.join(featurePath, 'package.xml');
-	const destructiveChangesXmlPath = path.join(
-		featurePath,
-		'destructiveChanges.xml',
-	);
-
-	const types: SalesforcePackageXmlType = {};
-	for (const folder of folders) {
-		const baseName = path.basename(folder).toLowerCase();
-		if (folderMappings[baseName]) {
-			// Read files and folders (hence using 'entries' convention)
-			const entries = await fsPromises.readdir(folder, { withFileTypes: true });
-			types[folderMappings[baseName]] = entries
-				.filter(entry => !entry.name.endsWith('-meta.xml')) // TODO: Need to tighten up this using a regex (use just cls and trigger hard code for time being)
-				.map(entry => path.parse(entry.name).name);
-		}
-	}
-
-	if (destructive) {
-		const emptyPackageXml = createEmptyPackageXmlContent(API_VERSION);
-		await fsPromises.writeFile(packageXmlPath, emptyPackageXml);
-		const destructiveChangesXml = createPackageXmlContent(types);
-		await fsPromises.writeFile(
-			destructiveChangesXmlPath,
-			destructiveChangesXml,
-		);
-	} else {
-		const packageXml = createPackageXmlContent(types, API_VERSION);
-		await fsPromises.writeFile(packageXmlPath, packageXml);
-	}
-};
-
 const createSalesforcePackageMetadata = async (
 	featurePath: string,
 ): Promise<boolean> => {
@@ -286,7 +181,7 @@ const createSalesforcePackageMetadata = async (
 
 const createUninstallPackageMetadata = async (featurePath: string) => {
 	const featureName = path.basename(featurePath);
-	
+
 	// Ensure the uninstall dist folder exists
 	const uninstallDistPath = path.join(DIST_FOLDER, featureName, 'uninstall');
 	await fsPromises.mkdir(uninstallDistPath, { recursive: true });
@@ -417,36 +312,6 @@ const captureError = (ex: unknown, detailedPrefix?: string) => {
 	);
 };
 
-/* const createInstallationZip = async (featurePath: string): Promise<string> => {
-	const distPath = path.join(featurePath, 'dist');
-	const packagePath = path.join(featurePath, 'package');
-	const basename = path.basename(featurePath);
-	// const packageXmlPath = path.join(featurePath, 'package.xml');
-	const installZipPath = path.join(
-		featurePath,
-		'dist',
-		`${basename}-install.zip`,
-	);
-
-	// Create the package.xml file
-	// await createPackageXml(featurePath);
-
-	// TODO: Call this function before creating the zip files
-	// await createSalesforcePackageMetadata(featurePath);
-
-	// Ensure the dist folder exists
-	await fsPromises.mkdir(distPath, { recursive: true });
-
-	// Zip the contents of the feature folder (including package.xml) and save
-	// it to the dist folder
-	await zipFolder(packagePath, installZipPath);
-
-	// Remove the temporary package.xml file
-	// await deleteFile(packageXmlPath);
-
-	return installZipPath;
-}; */
-
 const createZipFiles = async (
 	featurePath: string,
 ): Promise<{ installZipPath: string; uninstallZipPath: string }> => {
@@ -458,8 +323,8 @@ const createZipFiles = async (
 
 	// Zip the contents of the install and uninstall folders and save
 	// to the dist folder
-	await zipFolder(distPath, installZipPath);
-	await zipFolder(distPath, uninstallZipPath);
+	await zipFolder(path.join(distPath, 'install'), installZipPath);
+	await zipFolder(path.join(distPath, 'uninstall'), uninstallZipPath);
 
 	return { installZipPath, uninstallZipPath };
 };
@@ -478,69 +343,6 @@ const deleteFile = async (filePath: string): Promise<void> => {
 		captureError(error, `Error removing file: ${filePath}`);
 	}
 };
-
-/* const createUninstallZip = async (featurePath: string): Promise<string> => {
-	const distPath = path.join(featurePath, 'dist');
-	const basename = path.basename(featurePath);
-	const destructiveChangesXmlPath = path.join(
-		featurePath,
-		'destructiveChanges.xml',
-	);
-	const packageXmlPath = path.join(featurePath, 'package.xml');
-	const uninstallZipPath = path.join(
-		featurePath,
-		'dist',
-		`${basename}-uninstall.zip`,
-	);
-
-	// Ensure the dist folder exists
-	await fsPromises.mkdir(distPath, { recursive: true });
-
-	// Create the package.xml and destructiveChanges.xml files
-	await createPackageXml(featurePath, true);
-
-	// Create a zip file containing just the package.xml and
-	// destructiveChanges.xml files
-	const output = fs.createWriteStream(
-		path.join(distPath, `${basename}-uninstall.zip`),
-	);
-	const archive = archiver('zip', {
-		zlib: { level: 9 }, // Sets the compression level
-	});
-
-	const zipPromise$ = new Promise<string>((resolve, reject) => {
-		output.on('close', () => {
-			console.log(
-				`Archive created successfully, total bytes: ${archive.pointer()}`,
-			);
-			resolve(uninstallZipPath);
-		});
-
-		archive.on('error', err => {
-			reject(err);
-		});
-
-		archive.pipe(output);
-
-		// Append the package.xml and destructiveChanges.xml files to the archive
-		archive.file(path.join(featurePath, 'package.xml'), {
-			name: 'package.xml',
-		});
-		archive.file(path.join(featurePath, 'destructiveChanges.xml'), {
-			name: 'destructiveChanges.xml',
-		});
-
-		archive.finalize();
-	});
-
-	await zipPromise$;
-
-	// Remove the temporary xml files
-	await deleteFile(packageXmlPath);
-	await deleteFile(destructiveChangesXmlPath);
-
-	return uninstallZipPath;
-}; */
 
 const createZipFileRequestUrl = (
 	owner: string,
@@ -607,9 +409,6 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		const files = await getFolderStructure([featurePath]);
 
 		await createSalesforcePackageMetadata(featurePath);
-
-		// const installZipPath = await createInstallationZip(featurePath);
-		// const uninstallZipPath = await createUninstallZip(featurePath);
 
 		const { installZipPath, uninstallZipPath } = await createZipFiles(
 			featurePath,
