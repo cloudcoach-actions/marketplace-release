@@ -7,10 +7,12 @@ import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { Builder, parseStringPromise } from 'xml2js';
 import {
+	Feature,
 	IndexData,
 	metadataTypeFolderMappings,
 	SalesforceMetadataType,
 } from './models/marketplace.models';
+import { FolderStructureBuilder } from './utils/folder-parser';
 
 // Action inputs
 const API_VERSION = core.getInput('api-version');
@@ -82,6 +84,26 @@ const getFolderStructure = async (folderPaths: string[]) => {
 	return allFilePaths;
 };
 
+const getFolderStructureGroupedByObjectType = async (
+	folderPaths: string[],
+): Promise<Record<string, string[]>> => {
+	const allFilePaths = await getFolderStructure(folderPaths);
+	const groupedFolders = {};
+
+	allFilePaths.forEach(filePath => {
+		const relativePath = path.relative(folderPaths[0], filePath);
+		const topLevelFolder = relativePath.split(path.sep)[0];
+
+		if (!groupedFolders[topLevelFolder]) {
+			groupedFolders[topLevelFolder] = [];
+		}
+
+		groupedFolders[topLevelFolder].push(filePath);
+	});
+
+	return groupedFolders;
+};
+
 /**
  * Create a zip file of the contents of a specified folder
  * excluding the 'dist' folder.
@@ -141,13 +163,21 @@ const parseFilePaths = (filesPaths: string[]): string[] => {
 	return filteredPaths;
 };
 
+const prepDependencies = async (features: string[]) => {};
+
 const createSalesforcePackageMetadata = async (
 	featurePath: string,
+	featureInfo: Feature,
 ): Promise<boolean> => {
 	const featurePathSegments = featurePath.split(path.sep);
 	const featureName = path.basename(featurePath);
 	const packageDirectoryPath = featurePathSegments.slice(-2).join(path.sep);
 	const outputDir = path.join(DIST_FOLDER, featureName, 'install');
+
+	if (featureInfo.dependencies && featureInfo.dependencies.length) {
+		// Prepare the dependencies
+		await prepDependencies(featureInfo.dependencies);
+	}
 
 	const sfdxProjectJson = {
 		packageDirectories: [{ path: packageDirectoryPath, default: true }],
@@ -397,18 +427,27 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	// Keep track of created zip file paths for later use
 	const zipPaths: string[] = [];
 
+	let folderStructureBuilder: FolderStructureBuilder;
+
 	for (const folder of features) {
 		const featurePath = path.join(contentDir, folder);
 		// Read the existing info.json file from the feature folder. We'll need
 		// this to build the index.json
-		const featureInfo = await fsPromises.readFile(
+		const featureInfoContent = await fsPromises.readFile(
 			path.join(featurePath, 'info.json'),
 			'utf8',
 		);
-		const parsed = JSON.parse(featureInfo);
-		const files = await getFolderStructure([featurePath]);
+		const featureInfo = JSON.parse(featureInfoContent) as Feature;
 
-		await createSalesforcePackageMetadata(featurePath);
+		const filePathsByObjectType = await getFolderStructureGroupedByObjectType([
+			featurePath,
+		]);
+		folderStructureBuilder = new FolderStructureBuilder(
+			filePathsByObjectType,
+			IGNORED_DIRECTORY_CONTENT,
+		);
+
+		await createSalesforcePackageMetadata(featurePath, featureInfo);
 
 		const { installZipPath, uninstallZipPath } = await createZipFiles(
 			featurePath,
@@ -419,14 +458,14 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 
 		info.features.push({
 			name: folder,
-			label: parsed.label,
-			description: parsed.description,
+			label: featureInfo.label,
+			description: featureInfo.description,
 			version: RELEASE_VERSION,
-			files: parseFilePaths(files)
-				.filter(file => !file.endsWith('-meta.xml'))
-				.map(file => path.relative(featurePath, file)), // TODO: Iterate each item, add to a set and replace the -meta.xml with empty string
-			iconUrl: parsed.iconUrl,
-			dependencies: parsed.dependencies || [],
+			files: folderStructureBuilder
+				.build()
+				.map(file => path.relative(featurePath, file)),
+			iconUrl: featureInfo.iconUrl,
+			dependencies: featureInfo.dependencies || [],
 		});
 	}
 
