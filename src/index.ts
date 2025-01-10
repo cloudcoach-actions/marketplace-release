@@ -151,19 +151,44 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
 		.map(entry => path.join(directory, entry.name));
 };
 
-const parseFilePaths = (filesPaths: string[]): string[] => {
-	const filteredPaths = filesPaths.filter(filePath => {
-		const fileName = path.basename(filePath);
-		return (
-			/\.[^\/]+$/.test(fileName) &&
-			!IGNORED_DIRECTORY_CONTENT.some(ignored => filePath.includes(ignored))
-		);
-	});
+/**
+ * Copies the content from the dependency folders to the feature folder so that
+ * they can be compiled together.
+ */
+const prepDependencies = async (
+	featurePath: string,
+	dependencies: string[],
+) => {
+	const featurePathSegments = featurePath.split(path.sep);
+	const featureParentPath = featurePathSegments.slice(0, -1).join(path.sep);
 
-	return filteredPaths;
+	core.setFailed;
+	for (const dependency of dependencies) {
+		const dependencyPath = path.join(featureParentPath, dependency);
+		const dependencySubdirectories = await getSubdirectories(dependencyPath);
+
+		for (const subdirectory of dependencySubdirectories) {
+			const subdirectoryName = path.basename(subdirectory);
+			const targetPath = path.join(featurePath, subdirectoryName);
+
+			try {
+				// Check if the target file already exists
+				if (await fileExists(targetPath)) {
+					core.warning(`File already exists: ${targetPath}`);
+					// Handle the conflict, e.g., generate a unique file name or skip the copy
+					// const uniqueTargetPath = generateUniqueFileName(targetPath);
+					// await exec.exec('cp', ['-r', subdirectory, uniqueTargetPath]);
+					// core.info(`Copied ${subdirectory} to ${uniqueTargetPath}`);
+				} else {
+					await exec.exec('cp', ['-r', subdirectory, targetPath]);
+					core.info(`Copied ${subdirectory} to ${targetPath}`);
+				}
+			} catch (ex) {
+				captureError(ex, `Error copying ${subdirectory} to ${targetPath}`);
+			}
+		}
+	}
 };
-
-const prepDependencies = async (features: string[]) => {};
 
 const createSalesforcePackageMetadata = async (
 	featurePath: string,
@@ -175,8 +200,7 @@ const createSalesforcePackageMetadata = async (
 	const outputDir = path.join(DIST_FOLDER, featureName, 'install');
 
 	if (featureInfo.dependencies && featureInfo.dependencies.length) {
-		// Prepare the dependencies
-		await prepDependencies(featureInfo.dependencies);
+		await prepDependencies(featurePath, featureInfo.dependencies);
 	}
 
 	const sfdxProjectJson = {
@@ -201,6 +225,11 @@ const createSalesforcePackageMetadata = async (
 		// Create the uninstall package metadata which uses the created
 		// install package.xml
 		await createUninstallPackageMetadata(featurePath);
+
+		// Discard local changes in the feature folder to ensure that if any files
+		// were copied in as dependencies, they are removed before any
+		// following iterations
+		await discardLocalChanges(featurePath);
 
 		return true;
 	} catch (ex) {
@@ -324,6 +353,19 @@ const commit = async () => {
 		await exec.exec('git', ['push']);
 	} catch (ex) {
 		captureError(ex, 'Error committing changes');
+	}
+};
+
+/**
+ * Helper function to discard local changes in a specific folder
+ */
+const discardLocalChanges = async (folderPath: string) => {
+	try {
+		await exec.exec('git', ['restore', '--staged', '--worktree', folderPath]);
+		core.info(`Discarded local changes in folder: ${folderPath}`);
+	} catch (error) {
+		core.error(`Failed to discard local changes in folder: ${folderPath}`);
+		throw error;
 	}
 };
 
