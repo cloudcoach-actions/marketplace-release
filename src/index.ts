@@ -190,7 +190,10 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
 	}
 }; */
 
-// Updated prepDependencies function
+/**
+ * Copies the content from the dependency folders to the feature folder so that
+ * they can be compiled together.
+ */
 const prepDependencies = async (
 	featurePath: string,
 	dependencies: string[],
@@ -200,6 +203,25 @@ const prepDependencies = async (
 
 	for (const dependency of dependencies) {
 		const dependencyPath = path.join(featureParentPath, dependency);
+
+		// Check if the dependency feature has its own dependencies and
+		// call recursively
+		try {
+			const dependencyFeatureInfo = await readFeatureInfo(dependencyPath);
+			if (
+				dependencyFeatureInfo.dependencies &&
+				dependencyFeatureInfo.dependencies.length
+			) {
+				await prepDependencies(
+					dependencyPath,
+					dependencyFeatureInfo.dependencies,
+				);
+			}
+		} catch (ex) {
+			captureError(ex, `Error reading feature info for ${dependencyPath}`);
+			continue; // Skip processing this dependency if there's an error
+		}
+
 		const dependencySubdirectories = await getSubdirectories(dependencyPath);
 
 		for (const subdirectory of dependencySubdirectories) {
@@ -217,23 +239,6 @@ const prepDependencies = async (
 			} catch (ex) {
 				captureError(ex, `Error copying ${subdirectory} to ${targetPath}`);
 			}
-		}
-
-		// Check if the dependency feature has its own dependencies and
-		// call recursively
-		try {
-			const dependencyFeatureInfo = await readFeatureInfo(dependencyPath);
-			if (
-				dependencyFeatureInfo.dependencies &&
-				dependencyFeatureInfo.dependencies.length
-			) {
-				await prepDependencies(
-					dependencyPath,
-					dependencyFeatureInfo.dependencies,
-				);
-			}
-		} catch (ex) {
-			captureError(ex, `Error reading feature info for ${dependencyPath}`);
 		}
 	}
 };
