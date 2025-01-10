@@ -5,7 +5,7 @@ import archiver from 'archiver';
 import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
-import { Builder } from 'xml2js';
+import { Builder, parseStringPromise } from 'xml2js';
 import {
 	IndexData,
 	metadataTypeFolderMappings,
@@ -24,9 +24,11 @@ const RELEASE_VERSION: string = core.getInput('release-version', {
 const GITHUB_TRIGGERING_ACTOR: string = process.env.GITHUB_TRIGGERING_ACTOR!;
 const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 
+// Constants
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
 const SFDX_PROJECT_JSON_FILE: string = path.join(GITHUB_WORKSPACE, 'sfdx-project.json');
 const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
+const DIST_FOLDER: string = path.join(GITHUB_WORKSPACE, 'dist');
 const IGNORED_DIRECTORY_CONTENT = [
 	'dist',
 	'.DS_Store',
@@ -203,7 +205,7 @@ const createEmptyPackageXmlContent = (version: string): string => {
 };
 
 /**
- * @deprecated Use createPackageXmlWithCli instead
+ * @deprecated Use createSalesforcePackageMetadata instead
  */
 const createPackageXml = async (
 	featurePath: string,
@@ -242,16 +244,21 @@ const createPackageXml = async (
 	}
 };
 
-const createPackageXmlWithCli = async (
+const createSalesforcePackageMetadata = async (
 	featurePath: string,
 	destructive = false,
-): Promise<void> => {
+): Promise<boolean> => {
 	console.log(featurePath);
 
 	const featurePathSegments = featurePath.split(path.sep);
+	const featureName = path.basename(featurePath);
 	const packageDirectoryPath = featurePathSegments.slice(-2).join(path.sep);
 	const outputDir = path.join(packageDirectoryPath, 'package');
 	core.info('outputDir: ' + outputDir);
+
+	const zipType = destructive ? 'uninstall' : 'install';
+	const outputDir2 = path.join(DIST_FOLDER, featureName, zipType);
+	core.info('outputDir2: ' + outputDir2);
 
 	const sfdxProjectJson = {
 		packageDirectories: [{ path: packageDirectoryPath, default: true }],
@@ -264,18 +271,34 @@ const createPackageXmlWithCli = async (
 	await fsPromises.writeFile(SFDX_PROJECT_JSON_FILE, JSON.stringify(sfdxProjectJson));
 
 	try {
-		// Configure git
+		// Use the Salesforce CLI to generate the package.xml and source content
 		await exec.exec('sf', [
 			'project',
 			'convert',
 			'source',
 			'-d',
-			outputDir,
+			outputDir2,
 		]);
 		core.info('Converted source to metadata format');
+
+		await createUninstallPackageMetadata(featurePath);
+
+		return true;
 	} catch (ex) {
 		captureError(ex, `Error running 'sf project convert source' command`);
+		return false;
 	}
+};
+
+const createUninstallPackageMetadata = async (featurePath: string) => {
+	const builder = new Builder();
+	const featureName = path.basename(featurePath);
+	const packageXmlPath = path.join(DIST_FOLDER, featureName, 'install/package.xml');
+	core.info('packageXmlPath: ' + packageXmlPath);
+	const packageXmlContent = await fsPromises.readFile(packageXmlPath, 'utf8');
+
+	const parsedPackageXml = await parseStringPromise(packageXmlContent);
+	console.log(parsedPackageXml);
 };
 
 const hasPendingChanges = async (): Promise<boolean> => {
@@ -362,7 +385,7 @@ const createInstallationZip = async (featurePath: string): Promise<string> => {
 	// Create the package.xml file
 	// await createPackageXml(featurePath);
 
-	await createPackageXmlWithCli(featurePath);
+	await createSalesforcePackageMetadata(featurePath);
 
 	// Ensure the dist folder exists
 	await fsPromises.mkdir(distPath, { recursive: true });
