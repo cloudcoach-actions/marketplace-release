@@ -26,7 +26,10 @@ const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 
 // Constants
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
-const SFDX_PROJECT_JSON_FILE: string = path.join(GITHUB_WORKSPACE, 'sfdx-project.json');
+const SFDX_PROJECT_JSON_FILE: string = path.join(
+	GITHUB_WORKSPACE,
+	'sfdx-project.json',
+);
 const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
 const DIST_FOLDER: string = path.join(GITHUB_WORKSPACE, 'dist');
 const IGNORED_DIRECTORY_CONTENT = [
@@ -44,10 +47,9 @@ const octokit = github.getOctokit(GITHUB_TOKEN);
  * Local metadata folder mappings primarily used for comparing folder names
  * using lower case keys.
  */
-const folderMappings: Record<
-	string,
-	SalesforceMetadataType
-> = Object.keys(metadataTypeFolderMappings).reduce((acc, key) => {
+const folderMappings: Record<string, SalesforceMetadataType> = Object.keys(
+	metadataTypeFolderMappings,
+).reduce((acc, key) => {
 	acc[key.toLowerCase()] = metadataTypeFolderMappings[key];
 	return acc;
 }, {} as Record<string, SalesforceMetadataType>);
@@ -246,41 +248,33 @@ const createPackageXml = async (
 
 const createSalesforcePackageMetadata = async (
 	featurePath: string,
-	destructive = false,
 ): Promise<boolean> => {
-	console.log(featurePath);
-
 	const featurePathSegments = featurePath.split(path.sep);
 	const featureName = path.basename(featurePath);
 	const packageDirectoryPath = featurePathSegments.slice(-2).join(path.sep);
-	const outputDir = path.join(packageDirectoryPath, 'package');
-	core.info('outputDir: ' + outputDir);
-
-	const zipType = destructive ? 'uninstall' : 'install';
-	const outputDir2 = path.join(DIST_FOLDER, featureName, zipType);
-	core.info('outputDir2: ' + outputDir2);
+	const outputDir = path.join(DIST_FOLDER, featureName, 'install');
 
 	const sfdxProjectJson = {
 		packageDirectories: [{ path: packageDirectoryPath, default: true }],
 		sfdcLoginUrl: 'https://login.salesforce.com',
 		sourceApiVersion: API_VERSION,
 	};
-	console.log(sfdxProjectJson);
+	core.info(JSON.stringify(sfdxProjectJson));
 
-	// write this file to the root of the project
-	await fsPromises.writeFile(SFDX_PROJECT_JSON_FILE, JSON.stringify(sfdxProjectJson));
+	// Write the sfdx-project.json to the root folder so that it can be
+	// recognized by the Salesforce CLI
+	await fsPromises.writeFile(
+		SFDX_PROJECT_JSON_FILE,
+		JSON.stringify(sfdxProjectJson),
+	);
 
 	try {
 		// Use the Salesforce CLI to generate the package.xml and source content
-		await exec.exec('sf', [
-			'project',
-			'convert',
-			'source',
-			'-d',
-			outputDir2,
-		]);
-		core.info('Converted source to metadata format');
+		await exec.exec('sf', ['project', 'convert', 'source', '-d', outputDir]);
+		core.info(`Install artifacts for ${featureName}, created successfully`);
 
+		// Create the uninstall package metadata which uses the created
+		// install package.xml
 		await createUninstallPackageMetadata(featurePath);
 
 		return true;
@@ -291,14 +285,62 @@ const createSalesforcePackageMetadata = async (
 };
 
 const createUninstallPackageMetadata = async (featurePath: string) => {
-	const builder = new Builder();
 	const featureName = path.basename(featurePath);
-	const packageXmlPath = path.join(DIST_FOLDER, featureName, 'install/package.xml');
+
+	// Read the package.xml content from the install dist folder
+	const packageXmlPath = path.join(
+		DIST_FOLDER,
+		featureName,
+		'install/package.xml',
+	);
 	core.info('packageXmlPath: ' + packageXmlPath);
 	const packageXmlContent = await fsPromises.readFile(packageXmlPath, 'utf8');
 
+	// Parse the XML content
 	const parsedPackageXml = await parseStringPromise(packageXmlContent);
-	console.log(parsedPackageXml);
+
+	// Extract and remove the <types> nodes
+	const typesNodes = parsedPackageXml.Package.types;
+	delete parsedPackageXml.Package.types;
+
+	// Create a new XML content with the removed <types> nodes
+	const builder = new Builder();
+	const destructiveChangesXml = builder
+		.buildObject({ Package: { types: typesNodes } })
+		.replace(
+			'<Package>',
+			'<Package xmlns="http://soap.sforce.com/2006/04/metadata">',
+		)
+		.replace(' standalone="yes"', '');
+
+	// Create updated package.xml content with the removed <types> nodes
+	const updatedPackageXml = builder
+		.buildObject(parsedPackageXml)
+		.replace(
+			'<Package>',
+			'<Package xmlns="http://soap.sforce.com/2006/04/metadata">',
+		)
+		.replace(' standalone="yes"', '');
+
+	// Define the new file paths
+	const updatedPackageXmlPath = path.join(
+		DIST_FOLDER,
+		featureName,
+		'uninstall/package.xml',
+	);
+	const destructiveChangesXmlPath = path.join(
+		DIST_FOLDER,
+		featureName,
+		'uninstall/destructiveChanges.xml',
+	);
+
+	// Write the modified package.xml content without <types> nodes
+	await fsPromises.writeFile(updatedPackageXmlPath, updatedPackageXml);
+
+	// Write the destructiveChanges.xml content with only <types> nodes
+	await fsPromises.writeFile(destructiveChangesXmlPath, destructiveChangesXml);
+
+	core.info(`Uninstall artifacts for ${featureName}, created successfully`);
 };
 
 const hasPendingChanges = async (): Promise<boolean> => {
@@ -371,7 +413,7 @@ const captureError = (ex: unknown, detailedPrefix?: string) => {
 	);
 };
 
-const createInstallationZip = async (featurePath: string): Promise<string> => {
+/* const createInstallationZip = async (featurePath: string): Promise<string> => {
 	const distPath = path.join(featurePath, 'dist');
 	const packagePath = path.join(featurePath, 'package');
 	const basename = path.basename(featurePath);
@@ -385,7 +427,8 @@ const createInstallationZip = async (featurePath: string): Promise<string> => {
 	// Create the package.xml file
 	// await createPackageXml(featurePath);
 
-	await createSalesforcePackageMetadata(featurePath);
+	// TODO: Call this function before creating the zip files
+	// await createSalesforcePackageMetadata(featurePath);
 
 	// Ensure the dist folder exists
 	await fsPromises.mkdir(distPath, { recursive: true });
@@ -398,6 +441,23 @@ const createInstallationZip = async (featurePath: string): Promise<string> => {
 	// await deleteFile(packageXmlPath);
 
 	return installZipPath;
+}; */
+
+const createZipFiles = async (
+	featurePath: string,
+): Promise<{ installZipPath: string; uninstallZipPath: string }> => {
+	const featureName = path.basename(featurePath);
+	const distPath = path.join(DIST_FOLDER, featureName);
+
+	const installZipPath = path.join(distPath, `${featureName}-install.zip`);
+	const uninstallZipPath = path.join(distPath, `${featureName}-uninstall.zip`);
+
+	// Zip the contents of the install and uninstall folders and save
+	// to the dist folder
+	await zipFolder(distPath, installZipPath);
+	await zipFolder(distPath, uninstallZipPath);
+
+	return { installZipPath, uninstallZipPath };
 };
 
 const fileExists = async (filePath: string): Promise<boolean> =>
@@ -415,7 +475,7 @@ const deleteFile = async (filePath: string): Promise<void> => {
 	}
 };
 
-const createUninstallZip = async (featurePath: string): Promise<string> => {
+/* const createUninstallZip = async (featurePath: string): Promise<string> => {
 	const distPath = path.join(featurePath, 'dist');
 	const basename = path.basename(featurePath);
 	const destructiveChangesXmlPath = path.join(
@@ -476,7 +536,7 @@ const createUninstallZip = async (featurePath: string): Promise<string> => {
 	await deleteFile(destructiveChangesXmlPath);
 
 	return uninstallZipPath;
-};
+}; */
 
 const createZipFileRequestUrl = (
 	owner: string,
@@ -542,11 +602,17 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		const parsed = JSON.parse(featureInfo);
 		const files = await getFolderStructure([featurePath]);
 
-		const installZipPath = await createInstallationZip(featurePath);
+		await createSalesforcePackageMetadata(featurePath);
+
+		// const installZipPath = await createInstallationZip(featurePath);
 		// const uninstallZipPath = await createUninstallZip(featurePath);
 
+		const { installZipPath, uninstallZipPath } = await createZipFiles(
+			featurePath,
+		);
+
 		zipPaths.push(installZipPath);
-		// zipPaths.push(uninstallZipPath);
+		zipPaths.push(uninstallZipPath);
 
 		info.features.push({
 			name: folder,
