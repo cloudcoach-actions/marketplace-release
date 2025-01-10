@@ -286,6 +286,10 @@ const createSalesforcePackageMetadata = async (
 
 const createUninstallPackageMetadata = async (featurePath: string) => {
 	const featureName = path.basename(featurePath);
+	
+	// Ensure the uninstall dist folder exists
+	const uninstallDistPath = path.join(DIST_FOLDER, featureName, 'uninstall');
+	await fsPromises.mkdir(uninstallDistPath, { recursive: true });
 
 	// Read the package.xml content from the install dist folder
 	const packageXmlPath = path.join(
