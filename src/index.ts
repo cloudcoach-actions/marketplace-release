@@ -155,7 +155,7 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
  * Copies the content from the dependency folders to the feature folder so that
  * they can be compiled together.
  */
-const prepDependencies = async (
+/* const prepDependencies = async (
 	featurePath: string,
 	dependencies: string[],
 ) => {
@@ -186,6 +186,54 @@ const prepDependencies = async (
 			} catch (ex) {
 				captureError(ex, `Error copying ${subdirectory} to ${targetPath}`);
 			}
+		}
+	}
+}; */
+
+// Updated prepDependencies function
+const prepDependencies = async (
+	featurePath: string,
+	dependencies: string[],
+) => {
+	const featurePathSegments = featurePath.split(path.sep);
+	const featureParentPath = featurePathSegments.slice(0, -1).join(path.sep);
+
+	for (const dependency of dependencies) {
+		const dependencyPath = path.join(featureParentPath, dependency);
+		const dependencySubdirectories = await getSubdirectories(dependencyPath);
+
+		for (const subdirectory of dependencySubdirectories) {
+			const subdirectoryName = path.basename(subdirectory);
+			const targetPath = path.join(featurePath, subdirectoryName);
+
+			try {
+				// Check if the target file already exists
+				if (await fileExists(targetPath)) {
+					core.setFailed(`File already exists: ${targetPath}`);
+				} else {
+					await exec.exec('cp', ['-r', subdirectory, targetPath]);
+					core.info(`Copied ${subdirectory} to ${targetPath}`);
+				}
+			} catch (ex) {
+				captureError(ex, `Error copying ${subdirectory} to ${targetPath}`);
+			}
+		}
+
+		// Check if the dependency feature has its own dependencies and
+		// call recursively
+		try {
+			const dependencyFeatureInfo = await readFeatureInfo(dependencyPath);
+			if (
+				dependencyFeatureInfo.dependencies &&
+				dependencyFeatureInfo.dependencies.length
+			) {
+				await prepDependencies(
+					dependencyPath,
+					dependencyFeatureInfo.dependencies,
+				);
+			}
+		} catch (ex) {
+			captureError(ex, `Error reading feature info for ${dependencyPath}`);
 		}
 	}
 };
@@ -414,6 +462,15 @@ const deleteFile = async (filePath: string): Promise<void> => {
 	} catch (error) {
 		captureError(error, `Error removing file: ${filePath}`);
 	}
+};
+
+/**
+ * Helper function to read feature info from a file (e.g., info.json)
+ */
+const readFeatureInfo = async (featurePath: string): Promise<Feature> => {
+	const infoFilePath = path.join(featurePath, 'info.json');
+	const infoContent = await fs.promises.readFile(infoFilePath, 'utf8');
+	return JSON.parse(infoContent) as Feature;
 };
 
 const createZipFileRequestUrl = (
