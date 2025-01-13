@@ -84,6 +84,18 @@ const getFolderStructure = async (folderPaths: string[]) => {
 	return allFilePaths;
 };
 
+/**
+ * Takes a flat list of folder paths and groups them by the top-level
+ * folder name.
+ * 
+ * @example
+ * {
+ *   "classes": ["path/to/folder1/file1", "path/to/folder1/file2"],
+ *   "objects": ["path/to/folder1/file1", "path/to/folder1/file2"],
+ *   "pages": ["path/to/folder2/file1", "path/to/folder2/file2"]
+ * }
+ * @param folderPaths Array of folder paths to group
+ */
 const getFolderStructureGroupedByObjectType = async (
 	folderPaths: string[],
 ): Promise<Record<string, string[]>> => {
@@ -141,6 +153,11 @@ const zipFolder = async (sourceDir: string, outPath: string): Promise<void> => {
 	});
 };
 
+/**
+ * Gets all subdirectories under a specified directory.
+ *
+ * @param directory The source directory to get subdirectories from.
+ */
 const getSubdirectories = async (directory: string): Promise<string[]> => {
 	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
 	return entries
@@ -151,6 +168,11 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
 		.map(entry => path.join(directory, entry.name));
 };
 
+/**
+ * Gets all files in a specified directory.
+ *
+ * @param directory The source directory to get files from.
+ */
 const getFilesInDirectory = async (directory: string): Promise<string[]> => {
 	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
 	return entries
@@ -202,6 +224,13 @@ const prepDependencies = async (
 	}
 };
 
+/**
+ * Creates Salesforce package metadata for a feature install.
+ *
+ * @param featurePath The path to the feature within the repository.
+ * @param featureInfo The feature info object.
+ * @returns True if the operation was successful, false otherwise.
+ */
 const createSalesforcePackageMetadata = async (
 	featurePath: string,
 	featureInfo: Feature,
@@ -250,7 +279,16 @@ const createSalesforcePackageMetadata = async (
 	}
 };
 
-const createUninstallPackageMetadata = async (featurePath: string) => {
+/**
+ * Creates Salesforce package metadata for a feature uninstall. This method is
+ * dependent on the output created from the createSalesforcePackageMetadata()
+ * method.
+ *
+ * @param featurePath The path to the feature within the repository.
+ */
+const createUninstallPackageMetadata = async (
+	featurePath: string,
+): Promise<void> => {
 	const featureName = path.basename(featurePath);
 
 	// Ensure the uninstall dist folder exists
@@ -313,6 +351,9 @@ const createUninstallPackageMetadata = async (featurePath: string) => {
 	core.info(`Uninstall artifacts for ${featureName}, created successfully`);
 };
 
+/**
+ * Checks if there are any pending changes in the repository.
+ */
 const hasPendingChanges = async (): Promise<boolean> => {
 	let hasChanges = false;
 	let output = '';
@@ -335,6 +376,9 @@ const hasPendingChanges = async (): Promise<boolean> => {
 	return hasChanges;
 };
 
+/**
+ * Uses the GitHub cli to commit changes made during the execution of the action.
+ */
 const commit = async () => {
 	try {
 		// Configure git
@@ -381,6 +425,10 @@ const discardLocalChanges = async (folderPath: string) => {
 	}
 };
 
+/**
+ * Uses the GitHub cli to discard changes to the temp files created during
+ * the action.
+ */
 const discardTempFileChanges = async () => {
 	try {
 		await exec.exec('git', ['restore', '.']);
@@ -389,6 +437,12 @@ const discardTempFileChanges = async () => {
 	}
 };
 
+/**
+ * Capture an error message and add it to the errors array.
+ *
+ * @param ex The exception to capture.
+ * @param detailedPrefix A specific prefix to add to the error message.
+ */
 const captureError = (ex: unknown, detailedPrefix?: string) => {
 	const errMsg = ex instanceof Error ? ex.message : 'Unknown error';
 	errors.push(
@@ -396,6 +450,11 @@ const captureError = (ex: unknown, detailedPrefix?: string) => {
 	);
 };
 
+/**
+ * Creates install and uninstall zip files for a feature.
+ *
+ * @param featurePath The path to the feature within the repository.
+ */
 const createZipFiles = async (
 	featurePath: string,
 ): Promise<{ installZipPath: string; uninstallZipPath: string }> => {
@@ -413,12 +472,22 @@ const createZipFiles = async (
 	return { installZipPath, uninstallZipPath };
 };
 
+/**
+ * Checks if a file exists at the specified path.
+ *
+ * @param filePath The file path to check.
+ */
 const fileExists = async (filePath: string): Promise<boolean> =>
-	fs.promises
+	fsPromises
 		.access(filePath, fs.constants.F_OK)
 		.then(() => true)
 		.catch(() => false);
 
+/**
+ * Deletes a file at the specified path.
+ *
+ * @param filePath The file path of the file to delete.
+ */
 const deleteFile = async (filePath: string): Promise<void> => {
 	try {
 		await exec.exec('rm', [filePath]);
@@ -433,22 +502,17 @@ const deleteFile = async (filePath: string): Promise<void> => {
  */
 const readFeatureInfo = async (featurePath: string): Promise<Feature> => {
 	const infoFilePath = path.join(featurePath, 'info.json');
-	const infoContent = await fs.promises.readFile(infoFilePath, 'utf8');
+	const infoContent = await fsPromises.readFile(infoFilePath, 'utf8');
 	return JSON.parse(infoContent) as Feature;
 };
 
-const createZipFileRequestUrl = (
-	owner: string,
-	repo: string,
-	feature: string,
-	uninstall = false,
-) => {
-	const zipFile = uninstall
-		? `${feature}-uninstall.zip`
-		: `${feature}-install.zip`;
-	return `https://api.github.com/repos/${owner}/${repo}/contents/content/${feature}/dist/${zipFile}`;
-};
-
+/**
+ * Uploads a file as a GitHub release asset.
+ *
+ * @param releaseId The ID of the release to attach the asset to.
+ * @param assetPath The path to the asset file to upload.
+ * @param contentType The content type of the asset (e.g. application/zip).
+ */
 const uploadReleaseAsset = async (
 	releaseId: number,
 	assetPath: string,
@@ -475,6 +539,13 @@ const uploadReleaseAsset = async (
 	});
 };
 
+/**
+ * Processes a specified content folder and creates a GitHub release containing
+ * packaged install and uninstall feature zip files as release assets.
+ *
+ * @param contentDir The path to the content folder containing feature folders.
+ * @param indexFile The path to the index.json file to create.
+ */
 const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	// Get a list of each of the child folders under features
 	const features = await fsPromises.readdir(contentDir);
@@ -483,9 +554,6 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	const info: IndexData = {
 		features: [],
 	};
-
-	// Get the owner and repo from the context
-	const { owner, repo } = github.context.repo;
 
 	// Keep track of created zip file paths for later use
 	const zipPaths: string[] = [];
@@ -496,11 +564,9 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		const featurePath = path.join(contentDir, folder);
 		// Read the existing info.json file from the feature folder. We'll need
 		// this to build the index.json
-		const featureInfoContent = await fsPromises.readFile(
+		const featureInfo = await readFeatureInfo(
 			path.join(featurePath, 'info.json'),
-			'utf8',
 		);
-		const featureInfo = JSON.parse(featureInfoContent) as Feature;
 
 		// Skip features that are marked as dependencies as these won't be displayed
 		// in the Marketplace UI
@@ -572,6 +638,9 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	}
 };
 
+/**
+ * Main entry point for the action.
+ */
 (async () => {
 	await run(CONTENT_DIR, INDEX_FILE);
 	if (errors.length) {
