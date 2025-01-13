@@ -155,7 +155,7 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
  * Copies the content from the dependency folders to the feature folder so that
  * they can be compiled together.
  */
-/* const prepDependencies = async (
+const prepDependencies = async (
 	featurePath: string,
 	dependencies: string[],
 ) => {
@@ -165,63 +165,6 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
 	core.setFailed;
 	for (const dependency of dependencies) {
 		const dependencyPath = path.join(featureParentPath, dependency);
-		const dependencySubdirectories = await getSubdirectories(dependencyPath);
-
-		for (const subdirectory of dependencySubdirectories) {
-			const subdirectoryName = path.basename(subdirectory);
-			const targetPath = path.join(featurePath, subdirectoryName);
-
-			try {
-				// Check if the target file already exists
-				if (await fileExists(targetPath)) {
-					core.warning(`File already exists: ${targetPath}`);
-					// Handle the conflict, e.g., generate a unique file name or skip the copy
-					// const uniqueTargetPath = generateUniqueFileName(targetPath);
-					// await exec.exec('cp', ['-r', subdirectory, uniqueTargetPath]);
-					// core.info(`Copied ${subdirectory} to ${uniqueTargetPath}`);
-				} else {
-					await exec.exec('cp', ['-r', subdirectory, targetPath]);
-					core.info(`Copied ${subdirectory} to ${targetPath}`);
-				}
-			} catch (ex) {
-				captureError(ex, `Error copying ${subdirectory} to ${targetPath}`);
-			}
-		}
-	}
-}; */
-
-/**
- * Copies the content from the dependency folders to the feature folder so that
- * they can be compiled together.
- */
-const prepDependencies = async (
-	featurePath: string,
-	dependencies: string[],
-) => {
-	const featurePathSegments = featurePath.split(path.sep);
-	const featureParentPath = featurePathSegments.slice(0, -1).join(path.sep);
-
-	for (const dependency of dependencies) {
-		const dependencyPath = path.join(featureParentPath, dependency);
-
-		// Check if the dependency feature has its own dependencies and
-		// call recursively
-		try {
-			const dependencyFeatureInfo = await readFeatureInfo(dependencyPath);
-			if (
-				dependencyFeatureInfo.dependencies &&
-				dependencyFeatureInfo.dependencies.length
-			) {
-				await prepDependencies(
-					dependencyPath,
-					dependencyFeatureInfo.dependencies,
-				);
-			}
-		} catch (ex) {
-			captureError(ex, `Error reading feature info for ${dependencyPath}`);
-			continue; // Skip processing this dependency if there's an error
-		}
-
 		const dependencySubdirectories = await getSubdirectories(dependencyPath);
 
 		for (const subdirectory of dependencySubdirectories) {
