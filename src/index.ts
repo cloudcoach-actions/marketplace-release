@@ -162,7 +162,6 @@ const prepDependencies = async (
 	const featurePathSegments = featurePath.split(path.sep);
 	const featureParentPath = featurePathSegments.slice(0, -1).join(path.sep);
 
-	core.setFailed;
 	for (const dependency of dependencies) {
 		const dependencyPath = path.join(featureParentPath, dependency);
 		const dependencySubdirectories = await getSubdirectories(dependencyPath);
