@@ -504,9 +504,9 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 
 		// Skip features that are marked as dependencies as these won't be displayed
 		// in the Marketplace UI
-		if (featureInfo.availability && featureInfo.availability === 'dependency') {
+		/* if (featureInfo.availability && featureInfo.availability === 'dependency') {
 			continue;
-		}
+		} */
 
 		const filePathsByObjectType = await getFolderStructureGroupedByObjectType([
 			featurePath,
