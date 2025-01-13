@@ -151,6 +151,13 @@ const getSubdirectories = async (directory: string): Promise<string[]> => {
 		.map(entry => path.join(directory, entry.name));
 };
 
+const getFilesInDirectory = async (directory: string): Promise<string[]> => {
+	const entries = await fsPromises.readdir(directory, { withFileTypes: true });
+	return entries
+		.filter(entry => entry.isFile())
+		.map(entry => path.join(directory, entry.name));
+};
+
 /**
  * Copies the content from the dependency folders to the feature folder so that
  * they can be compiled together.
@@ -170,16 +177,26 @@ const prepDependencies = async (
 			const subdirectoryName = path.basename(subdirectory);
 			const targetPath = path.join(featurePath, subdirectoryName);
 
-			try {
-				// Check if the target file already exists
-				if (await fileExists(targetPath)) {
-					core.setFailed(`File already exists: ${targetPath}`);
-				} else {
-					await exec.exec('cp', ['-r', subdirectory, targetPath]);
-					core.info(`Copied ${subdirectory} to ${targetPath}`);
+			// Ensure the target directory exists
+			await fsPromises.mkdir(targetPath, { recursive: true });
+
+			const files = await getFilesInDirectory(subdirectory);
+
+			for (const file of files) {
+				const fileName = path.basename(file);
+				const targetFilePath = path.join(targetPath, fileName);
+
+				try {
+					// Check if the target file already exists
+					if (await fileExists(targetFilePath)) {
+						core.setFailed(`File already exists: ${targetFilePath}`);
+					} else {
+						await exec.exec('cp', [file, targetFilePath]);
+						core.info(`Copied ${file} to ${targetFilePath}`);
+					}
+				} catch (ex) {
+					captureError(ex, `Error copying ${file} to ${targetFilePath}`);
 				}
-			} catch (ex) {
-				captureError(ex, `Error copying ${subdirectory} to ${targetPath}`);
 			}
 		}
 	}
