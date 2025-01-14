@@ -564,9 +564,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		const featurePath = path.join(contentDir, folder);
 		// Read the existing info.json file from the feature folder. We'll need
 		// this to build the index.json
-		const featureInfo = await readFeatureInfo(
-			path.join(featurePath, 'info.json'),
-		);
+		const featureInfo = await readFeatureInfo(featurePath);
 
 		// Skip features that are marked as dependencies as these won't be displayed
 		// in the Marketplace UI
