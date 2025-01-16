@@ -87,7 +87,7 @@ const getFolderStructure = async (folderPaths: string[]) => {
 /**
  * Takes a flat list of folder paths and groups them by the top-level
  * folder name.
- * 
+ *
  * @example
  * {
  *   "classes": ["path/to/folder1/file1", "path/to/folder1/file2"],
@@ -233,16 +233,21 @@ const prepDependencies = async (
  */
 const createSalesforcePackageMetadata = async (
 	featurePath: string,
-	featureInfo: Feature,
+	fileSuffix?: string,
 ): Promise<boolean> => {
 	const featurePathSegments = featurePath.split(path.sep);
 	const featureName = path.basename(featurePath);
 	const packageDirectoryPath = featurePathSegments.slice(-2).join(path.sep);
-	const outputDir = path.join(DIST_FOLDER, featureName, 'install');
+	// const outputDir = path.join(DIST_FOLDER, featureName, 'install');
+	const outputDir = path.join(
+		DIST_FOLDER,
+		featureName,
+		fileSuffix ? `install-${fileSuffix}` : 'install',
+	);
 
-	if (featureInfo.dependencies && featureInfo.dependencies.length) {
+	/* if (featureInfo.dependencies && featureInfo.dependencies.length) {
 		await prepDependencies(featurePath, featureInfo.dependencies);
-	}
+	} */
 
 	const sfdxProjectJson = {
 		packageDirectories: [{ path: packageDirectoryPath, default: true }],
@@ -265,7 +270,7 @@ const createSalesforcePackageMetadata = async (
 
 		// Create the uninstall package metadata which uses the created
 		// install package.xml
-		await createUninstallPackageMetadata(featurePath);
+		await createUninstallPackageMetadata(featurePath, fileSuffix);
 
 		// Discard local changes in the feature folder to ensure that if any files
 		// were copied in as dependencies, they are removed before any
@@ -288,18 +293,20 @@ const createSalesforcePackageMetadata = async (
  */
 const createUninstallPackageMetadata = async (
 	featurePath: string,
+	fileSuffix?: string,
 ): Promise<void> => {
 	const featureName = path.basename(featurePath);
+	const folderName = fileSuffix ? `${featureName}-${fileSuffix}` : featureName;
 
 	// Ensure the uninstall dist folder exists
-	const uninstallDistPath = path.join(DIST_FOLDER, featureName, 'uninstall');
+	const uninstallDistPath = path.join(DIST_FOLDER, featureName, folderName);
 	await fsPromises.mkdir(uninstallDistPath, { recursive: true });
 
 	// Read the package.xml content from the install dist folder
 	const packageXmlPath = path.join(
 		DIST_FOLDER,
 		featureName,
-		'install/package.xml',
+		`${folderName}/package.xml`,
 	);
 	core.info('packageXmlPath: ' + packageXmlPath);
 	const packageXmlContent = await fsPromises.readFile(packageXmlPath, 'utf8');
@@ -334,12 +341,12 @@ const createUninstallPackageMetadata = async (
 	const updatedPackageXmlPath = path.join(
 		DIST_FOLDER,
 		featureName,
-		'uninstall/package.xml',
+		`${folderName}/package.xml`,
 	);
 	const destructiveChangesXmlPath = path.join(
 		DIST_FOLDER,
 		featureName,
-		'uninstall/destructiveChanges.xml',
+		`${folderName}/destructiveChanges.xml`,
 	);
 
 	// Write the modified package.xml content without <types> nodes
@@ -457,7 +464,13 @@ const captureError = (ex: unknown, detailedPrefix?: string) => {
  */
 const createZipFiles = async (
 	featurePath: string,
-): Promise<{ installZipPath: string; uninstallZipPath: string }> => {
+	withDeps = false,
+): Promise<{
+	installZipPath: string;
+	uninstallZipPath: string;
+	installWithDepsZipPath?: string;
+	uninstallWithDepsZipPath?: string;
+}> => {
 	const featureName = path.basename(featurePath);
 	const distPath = path.join(DIST_FOLDER, featureName);
 
@@ -468,6 +481,31 @@ const createZipFiles = async (
 	// to the dist folder
 	await zipFolder(path.join(distPath, 'install'), installZipPath);
 	await zipFolder(path.join(distPath, 'uninstall'), uninstallZipPath);
+
+	if (withDeps) {
+		const installWithDepsZipPath = path.join(
+			distPath,
+			`${featureName}-install-with-deps.zip`,
+		);
+		const uninstallWithDepsZipPath = path.join(
+			distPath,
+			`${featureName}-uninstall-with-deps.zip`,
+		);
+		await zipFolder(
+			path.join(distPath, 'install-with-deps'),
+			installWithDepsZipPath,
+		);
+		await zipFolder(
+			path.join(distPath, 'uninstall-with-deps'),
+			uninstallWithDepsZipPath,
+		);
+		return {
+			installZipPath,
+			uninstallZipPath,
+			installWithDepsZipPath,
+			uninstallWithDepsZipPath,
+		};
+	}
 
 	return { installZipPath, uninstallZipPath };
 };
@@ -566,11 +604,8 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 		// this to build the index.json
 		const featureInfo = await readFeatureInfo(featurePath);
 
-		// Skip features that are marked as dependencies as these won't be displayed
-		// in the Marketplace UI
-		/* if (featureInfo.availability && featureInfo.availability === 'dependency') {
-			continue;
-		} */
+		const hasDependencies =
+			!!featureInfo.dependencies && !!featureInfo.dependencies.length;
 
 		const filePathsByObjectType = await getFolderStructureGroupedByObjectType([
 			featurePath,
@@ -580,14 +615,29 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			IGNORED_DIRECTORY_CONTENT,
 		);
 
-		await createSalesforcePackageMetadata(featurePath, featureInfo);
+		await createSalesforcePackageMetadata(featurePath);
 
-		const { installZipPath, uninstallZipPath } = await createZipFiles(
-			featurePath,
-		);
+		if (hasDependencies) {
+			await prepDependencies(featurePath, featureInfo.dependencies as string[]);
+			await createSalesforcePackageMetadata(featurePath, '-with-deps');
+		}
+
+		const {
+			installZipPath,
+			uninstallZipPath,
+			installWithDepsZipPath,
+			uninstallWithDepsZipPath,
+		} = await createZipFiles(featurePath, hasDependencies);
 
 		zipPaths.push(installZipPath);
 		zipPaths.push(uninstallZipPath);
+
+		if (installWithDepsZipPath) {
+			zipPaths.push(installWithDepsZipPath);
+		}
+		if (uninstallWithDepsZipPath) {
+			zipPaths.push(uninstallWithDepsZipPath);
+		}
 
 		info.features.push({
 			name: folder,
