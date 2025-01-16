@@ -306,7 +306,7 @@ const createUninstallPackageMetadata = async (
 	const packageXmlPath = path.join(
 		DIST_FOLDER,
 		featureName,
-		`install${fileSuffix}/package.xml`,
+		fileSuffix ? `install${fileSuffix}/package.xml` : 'install/package.xml',
 	);
 	core.info('packageXmlPath: ' + packageXmlPath);
 	const packageXmlContent = await fsPromises.readFile(packageXmlPath, 'utf8');
