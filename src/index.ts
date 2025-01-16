@@ -242,7 +242,7 @@ const createSalesforcePackageMetadata = async (
 	const outputDir = path.join(
 		DIST_FOLDER,
 		featureName,
-		fileSuffix ? `install-${fileSuffix}` : 'install',
+		fileSuffix ? `install${fileSuffix}` : 'install',
 	);
 
 	/* if (featureInfo.dependencies && featureInfo.dependencies.length) {
@@ -296,7 +296,7 @@ const createUninstallPackageMetadata = async (
 	fileSuffix?: string,
 ): Promise<void> => {
 	const featureName = path.basename(featurePath);
-	const folderName = fileSuffix ? `uninstall-${fileSuffix}` : 'uninstall';
+	const folderName = fileSuffix ? `uninstall${fileSuffix}` : 'uninstall';
 
 	// Ensure the uninstall dist folder exists
 	const uninstallDistPath = path.join(DIST_FOLDER, featureName, folderName);
