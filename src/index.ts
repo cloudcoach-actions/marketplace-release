@@ -296,7 +296,7 @@ const createUninstallPackageMetadata = async (
 	fileSuffix?: string,
 ): Promise<void> => {
 	const featureName = path.basename(featurePath);
-	const folderName = fileSuffix ? `${featureName}-${fileSuffix}` : featureName;
+	const folderName = fileSuffix ? `uninstall-${fileSuffix}` : 'uninstall';
 
 	// Ensure the uninstall dist folder exists
 	const uninstallDistPath = path.join(DIST_FOLDER, featureName, folderName);
