@@ -242,17 +242,8 @@ const createSalesforcePackageMetadata = async (
 	fileSuffix?: string,
 ): Promise<boolean> => {
 	core.info(`Creating Salesforce package metadata for ${featurePath}`);
-	const featurePathSegments = featurePath.split(path.sep);
-	console.log(featurePath.split(path.sep));
 	const featureName = path.basename(featurePath);
-	console.log(featureName);
-	const packageDirectoryPath = featurePathSegments.slice(-2).join(path.sep);
-	core.info(`packageDirectoryPath: ${packageDirectoryPath}`);
 
-	// const packageDirectoryPathTemp = featurePathSegments.slice(-2).join(path.sep);
-	// core.info(`packageDirectoryPathTemp: ${packageDirectoryPathTemp}`);
-
-	// const outputDir = path.join(DIST_FOLDER, featureName, 'install');
 	const outputDir = path.join(
 		DIST_FOLDER,
 		featureName,
@@ -264,7 +255,9 @@ const createSalesforcePackageMetadata = async (
 	} */
 
 	const sfdxProjectJson = {
-		packageDirectories: [{ path: packageDirectoryPath, default: true }],
+		packageDirectories: [
+			{ path: path.relative(featurePath, GITHUB_WORKSPACE), default: true },
+		],
 		sfdcLoginUrl: 'https://login.salesforce.com',
 		sourceApiVersion: API_VERSION,
 	};
