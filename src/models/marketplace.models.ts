@@ -14,8 +14,18 @@ export interface Feature {
 	availability?: 'public' | 'dependency';
 }
 
+export interface Package {
+	name: string;
+	namespace: string;
+	packageId: string;
+	versionId: string;
+	description: string;
+	version: string;
+}
+
 export interface IndexData {
 	features: Feature[];
+	packages: Package | Package[];
 }
 
 export interface MarketplaceConfigPaths {

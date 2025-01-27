@@ -551,6 +551,10 @@ const readFeatureInfo = async (featurePath: string): Promise<Feature> => {
 	return JSON.parse(infoContent) as Feature;
 };
 
+/* const readPackageJson = async (packagePath: string): Promise<Package> => {
+	
+} */
+
 /**
  * Uploads a file as a GitHub release asset.
  *
@@ -588,16 +592,19 @@ const uploadReleaseAsset = async (
  * Processes a specified content folder and creates a GitHub release containing
  * packaged install and uninstall feature zip files as release assets.
  *
- * @param contentDir The path to the content folder containing feature folders.
  * @param indexFile The path to the index.json file to create.
  */
-const run = async (contentDir: string, indexFile: string): Promise<void> => {
-	// Get a list of each of the child folders under features
-	const features = await fsPromises.readdir(contentDir);
+const run = async (indexFile: string): Promise<void> => {
+	// Get a list of each of the feature folders
+	const features = await fsPromises.readdir(marketplaceConfig.paths.bundles);
+
+	// Get a list of each of the packages
+	const packages = await fsPromises.readdir(marketplaceConfig.paths.packages);
 
 	// Create an object to store the index data as we iterate through each feature
 	const info: IndexData = {
 		features: [],
+		packages: [],
 	};
 
 	// Keep track of created zip file paths for later use
@@ -606,7 +613,7 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	let folderStructureBuilder: FolderStructureBuilder;
 
 	for (const folder of features) {
-		const featurePath = path.join(contentDir, folder);
+		const featurePath = path.join(marketplaceConfig.paths.bundles, folder);
 		// Read the existing info.json file from the feature folder. We'll need
 		// this to build the index.json
 		const featureInfo = await readFeatureInfo(featurePath);
@@ -658,6 +665,10 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 			dependencies: featureInfo.dependencies || [],
 			availability: featureInfo.availability || 'public',
 		});
+	}
+
+	for (const pkg of packages) {
+		console.log(pkg);
 	}
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));
@@ -719,7 +730,7 @@ const loadMarketplaceConfig = async (
  */
 (async () => {
 	await loadMarketplaceConfig(MARKETPLACE_FILE);
-	await run(marketplaceConfig!.paths.bundles, INDEX_FILE);
+	await run(INDEX_FILE);
 	if (errors.length) {
 		core.setFailed(errors.join('\n'));
 	}
