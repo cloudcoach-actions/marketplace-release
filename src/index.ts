@@ -11,6 +11,7 @@ import {
 	IndexData,
 	MarketplaceConfig,
 	metadataTypeFolderMappings,
+	Package,
 	SalesforceMetadataType,
 } from './models/marketplace.models';
 import { FolderStructureBuilder } from './utils/folder-parser';
@@ -551,9 +552,12 @@ const readFeatureInfo = async (featurePath: string): Promise<Feature> => {
 	return JSON.parse(infoContent) as Feature;
 };
 
-/* const readPackageJson = async (packagePath: string): Promise<Package> => {
-	
-} */
+const readPackageJson = async (
+	packageFilePath: string,
+): Promise<IndexData['packages']> => {
+	const packageContent = await fsPromises.readFile(packageFilePath, 'utf8');
+	return JSON.parse(packageContent) as IndexData['packages'];
+};
 
 /**
  * Uploads a file as a GitHub release asset.
@@ -668,7 +672,8 @@ const run = async (indexFile: string): Promise<void> => {
 	}
 
 	for (const pkg of packages) {
-		console.log(pkg);
+		const packageData = await readPackageJson(pkg);
+		core.info(JSON.stringify(packageData));
 	}
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));
