@@ -552,11 +552,18 @@ const readFeatureInfo = async (featurePath: string): Promise<Feature> => {
 	return JSON.parse(infoContent) as Feature;
 };
 
-const readPackageJson = async (
-	packageFilePath: string,
-): Promise<IndexData['packages']> => {
+/**
+ * Helper function to read data within package json files.
+ */
+const readPackageJson = async (packageFilePath: string): Promise<Package[]> => {
 	const packageContent = await fsPromises.readFile(packageFilePath, 'utf8');
-	return JSON.parse(packageContent) as IndexData['packages'];
+	const parsedContent = JSON.parse(packageContent);
+
+	if (Array.isArray(parsedContent)) {
+		return parsedContent as Package[];
+	} else {
+		return [parsedContent as Package];
+	}
 };
 
 /**
@@ -675,6 +682,7 @@ const run = async (indexFile: string): Promise<void> => {
 		const packagePath = path.join(marketplaceConfig.paths.packages, pkg);
 		const packageData = await readPackageJson(packagePath);
 		core.info(JSON.stringify(packageData));
+		info.packages = info.packages.concat(packageData);
 	}
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));

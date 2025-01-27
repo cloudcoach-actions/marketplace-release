@@ -25,7 +25,7 @@ export interface Package {
 
 export interface IndexData {
 	features: Feature[];
-	packages: Package | Package[];
+	packages: Package[];
 }
 
 export interface MarketplaceConfigPaths {
