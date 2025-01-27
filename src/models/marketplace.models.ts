@@ -18,6 +18,15 @@ export interface IndexData {
 	features: Feature[];
 }
 
+export interface MarketplaceConfigPaths {
+	packages: string;
+	bundles: string;
+}
+
+export interface MarketplaceConfig {
+	paths: MarketplaceConfigPaths;
+}
+
 export type SalesforceMetadataType =
 	| 'ApexClass'
 	| 'ApexComponent'

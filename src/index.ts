@@ -9,6 +9,7 @@ import { Builder, parseStringPromise } from 'xml2js';
 import {
 	Feature,
 	IndexData,
+	MarketplaceConfig,
 	metadataTypeFolderMappings,
 	SalesforceMetadataType,
 } from './models/marketplace.models';
@@ -27,6 +28,10 @@ const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 
 // Constants
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
+const MARKETPLACE_FILE: string = path.join(
+	GITHUB_WORKSPACE,
+	'marketplace.json',
+);
 const SFDX_PROJECT_JSON_FILE: string = path.join(
 	GITHUB_WORKSPACE,
 	'sfdx-project.json',
@@ -43,6 +48,7 @@ const IGNORED_DIRECTORY_CONTENT = [
 
 const errors: string[] = [];
 const octokit = github.getOctokit(GITHUB_TOKEN);
+let marketplaceConfig: MarketplaceConfig;
 
 /**
  * Local metadata folder mappings primarily used for comparing folder names
@@ -686,11 +692,33 @@ const run = async (contentDir: string, indexFile: string): Promise<void> => {
 	}
 };
 
+const loadMarketplaceConfig = async (
+	marketplaceFile: string,
+): Promise<void> => {
+	try {
+		const content = await fsPromises.readFile(marketplaceFile, 'utf8');
+		marketplaceConfig = JSON.parse(content) as MarketplaceConfig;
+		marketplaceConfig.paths.bundles = path.join(
+			GITHUB_WORKSPACE,
+			marketplaceConfig.paths.bundles,
+		);
+		marketplaceConfig.paths.packages = path.join(
+			GITHUB_WORKSPACE,
+			marketplaceConfig.paths.packages,
+		);
+		core.debug(JSON.stringify(marketplaceConfig));
+		core.info('Marketplace configuration loaded successfully.');
+	} catch (error) {
+		core.setFailed(`Failed to load marketplace configuration: ${error}`);
+	}
+};
+
 /**
  * Main entry point for the action.
  */
 (async () => {
-	await run(CONTENT_DIR, INDEX_FILE);
+	await loadMarketplaceConfig(MARKETPLACE_FILE);
+	await run(marketplaceConfig!.paths.bundles, INDEX_FILE);
 	if (errors.length) {
 		core.setFailed(errors.join('\n'));
 	}
