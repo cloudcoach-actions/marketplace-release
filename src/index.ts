@@ -241,9 +241,17 @@ const createSalesforcePackageMetadata = async (
 	featurePath: string,
 	fileSuffix?: string,
 ): Promise<boolean> => {
+	core.info(`Creating Salesforce package metadata for ${featurePath}`);
 	const featurePathSegments = featurePath.split(path.sep);
+	console.log(featurePath.split(path.sep));
 	const featureName = path.basename(featurePath);
+	console.log(featureName);
 	const packageDirectoryPath = featurePathSegments.slice(-2).join(path.sep);
+	core.info(`packageDirectoryPath: ${packageDirectoryPath}`);
+
+	// const packageDirectoryPathTemp = featurePathSegments.slice(-2).join(path.sep);
+	// core.info(`packageDirectoryPathTemp: ${packageDirectoryPathTemp}`);
+
 	// const outputDir = path.join(DIST_FOLDER, featureName, 'install');
 	const outputDir = path.join(
 		DIST_FOLDER,
@@ -706,7 +714,7 @@ const loadMarketplaceConfig = async (
 			GITHUB_WORKSPACE,
 			marketplaceConfig.paths.packages,
 		);
-		core.debug(JSON.stringify(marketplaceConfig));
+		core.info(JSON.stringify(marketplaceConfig));
 		core.info('Marketplace configuration loaded successfully.');
 	} catch (error) {
 		core.setFailed(`Failed to load marketplace configuration: ${error}`);
