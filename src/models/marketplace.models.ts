@@ -3,9 +3,9 @@ export interface FileMetadata {
 	type?: string;
 }
 
-export interface Feature {
+export interface FeatureBundle {
+	id?: string;
 	name: string;
-	label: string;
 	description: string;
 	version: string;
 	files: string[];
@@ -13,6 +13,7 @@ export interface Feature {
 	dependencies?: string[];
 	packageDependencies?: string[];
 	availability?: 'public' | 'dependency';
+	tags?: string[];
 }
 
 export interface Package {
@@ -25,7 +26,7 @@ export interface Package {
 }
 
 export interface IndexData {
-	features: Feature[];
+	bundles: FeatureBundle[];
 	packages: Package[];
 }
 

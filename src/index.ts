@@ -7,7 +7,7 @@ import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { Builder, parseStringPromise } from 'xml2js';
 import {
-	Feature,
+	FeatureBundle,
 	IndexData,
 	MarketplaceConfig,
 	metadataTypeFolderMappings,
@@ -546,10 +546,10 @@ const deleteFile = async (filePath: string): Promise<void> => {
 /**
  * Helper function to read feature info from a file (e.g., info.json)
  */
-const readFeatureInfo = async (featurePath: string): Promise<Feature> => {
+const readFeatureInfo = async (featurePath: string): Promise<FeatureBundle> => {
 	const infoFilePath = path.join(featurePath, 'info.json');
 	const infoContent = await fsPromises.readFile(infoFilePath, 'utf8');
-	return JSON.parse(infoContent) as Feature;
+	return JSON.parse(infoContent) as FeatureBundle;
 };
 
 /**
@@ -614,7 +614,7 @@ const run = async (indexFile: string): Promise<void> => {
 
 	// Create an object to store the index data as we iterate through each feature
 	const info: IndexData = {
-		features: [],
+		bundles: [],
 		packages: [],
 	};
 
@@ -664,9 +664,9 @@ const run = async (indexFile: string): Promise<void> => {
 			zipPaths.push(uninstallWithDepsZipPath);
 		}
 
-		info.features.push({
-			name: folder,
-			label: featureInfo.label,
+		info.bundles.push({
+			id: folder,
+			name: featureInfo.name,
 			description: featureInfo.description,
 			version: RELEASE_VERSION,
 			files: folderStructureBuilder
@@ -676,6 +676,7 @@ const run = async (indexFile: string): Promise<void> => {
 			dependencies: featureInfo.dependencies || [],
 			packageDependencies: featureInfo.packageDependencies || [],
 			availability: featureInfo.availability || 'public',
+			tags: featureInfo.tags || [],
 		});
 	}
 
