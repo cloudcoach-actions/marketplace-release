@@ -11,6 +11,7 @@ export interface Feature {
 	files: string[];
 	iconUrl?: string;
 	dependencies?: string[];
+	packageDependencies?: string[];
 	availability?: 'public' | 'dependency';
 }
 

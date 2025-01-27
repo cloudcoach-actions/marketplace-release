@@ -674,6 +674,7 @@ const run = async (indexFile: string): Promise<void> => {
 				.map(file => path.relative(featurePath, file)),
 			iconUrl: featureInfo.iconUrl,
 			dependencies: featureInfo.dependencies || [],
+			packageDependencies: featureInfo.packageDependencies || [],
 			availability: featureInfo.availability || 'public',
 		});
 	}
