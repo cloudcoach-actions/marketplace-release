@@ -256,7 +256,7 @@ const createSalesforcePackageMetadata = async (
 
 	const sfdxProjectJson = {
 		packageDirectories: [
-			{ path: path.relative(featurePath, GITHUB_WORKSPACE), default: true },
+			{ path: path.relative(GITHUB_WORKSPACE, featurePath), default: true },
 		],
 		sfdcLoginUrl: 'https://login.salesforce.com',
 		sourceApiVersion: API_VERSION,
