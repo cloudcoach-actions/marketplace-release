@@ -672,7 +672,8 @@ const run = async (indexFile: string): Promise<void> => {
 	}
 
 	for (const pkg of packages) {
-		const packageData = await readPackageJson(pkg);
+		const packagePath = path.join(marketplaceConfig.paths.packages, pkg);
+		const packageData = await readPackageJson(packagePath);
 		core.info(JSON.stringify(packageData));
 	}
 
