@@ -39,6 +39,8 @@ const SFDX_PROJECT_JSON_FILE: string = path.join(
 );
 const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
 const DIST_FOLDER: string = path.join(GITHUB_WORKSPACE, 'dist');
+const PACKAGE_FILE_NAME: string = 'sfpackage.json';
+const README_FILE_NAME: string = 'README.md';
 const IGNORED_DIRECTORY_CONTENT = [
 	'dist',
 	'.DS_Store',
@@ -566,6 +568,33 @@ const readPackageJson = async (packageFilePath: string): Promise<Package[]> => {
 	}
 };
 
+/* const readPackageJson = async (
+	packageFilePath: string,
+): Promise<PackageData> => {
+	const packageContent = await fsPromises.readFile(packageFilePath, 'utf8');
+	const parsedContent = JSON.parse(packageContent);
+
+	const packages = Array.isArray(parsedContent)
+		? parsedContent
+		: [parsedContent];
+	const applyDocsToAllPackages = Array.isArray(parsedContent);
+
+	return {
+		packages,
+		applyDocsToAllPackages,
+	};
+}; */
+
+/**
+ * Reads the contents of a file at a specified path.
+ *
+ * @param filePath The path to the file.
+ */
+const readFile = async (filePath: string): Promise<string> => {
+	const content = await fsPromises.readFile(filePath, 'utf8');
+	return content;
+};
+
 /**
  * Uploads a file as a GitHub release asset.
  *
@@ -599,6 +628,41 @@ const uploadReleaseAsset = async (
 	});
 };
 
+const getPackageData = async (packageDir): Promise<Package[]> => {
+	const packages = await fsPromises.readdir(packageDir, {
+		withFileTypes: true,
+	});
+	let results: Package[] = [];
+
+	for (const entry of packages) {
+		const entryPath = path.join(packageDir, entry.name);
+		if (entry.isDirectory()) {
+			const subResults = await getPackageData(entryPath);
+			results = results.concat(subResults);
+		} else if (entry.isFile()) {
+			if (entry.name === PACKAGE_FILE_NAME) {
+				// const packageData = await readPackageJson(entryPath);
+				const packages  = await readPackageJson(entryPath);
+				// const result: PackageData = { ...packageData };
+				const readmePath = path.join(packageDir, README_FILE_NAME);
+				if (await fileExists(readmePath)) {
+					try {
+						const documentation = await readFile(readmePath);
+						packages.forEach(pkg => {
+							pkg.documentation = documentation;
+						});
+					} catch (ex) {
+						captureError(ex, `Error reading readme file ${readmePath}`);
+					}
+				}
+				results.push(...packages);
+			}
+		}
+	}
+
+	return results;
+};
+
 /**
  * Processes a specified content folder and creates a GitHub release containing
  * packaged install and uninstall feature zip files as release assets.
@@ -610,7 +674,9 @@ const run = async (indexFile: string): Promise<void> => {
 	const features = await fsPromises.readdir(marketplaceConfig.paths.bundles);
 
 	// Get a list of each of the packages
-	const packages = await fsPromises.readdir(marketplaceConfig.paths.packages);
+	// const packages = await fsPromises.readdir(marketplaceConfig.paths.packages);
+	const packages = await getPackageData(marketplaceConfig.paths.packages);
+	console.log(packages);
 
 	// Create an object to store the index data as we iterate through each feature
 	const info: IndexData = {
@@ -681,11 +747,16 @@ const run = async (indexFile: string): Promise<void> => {
 	}
 
 	for (const pkg of packages) {
+		core.info(JSON.stringify(pkg));
+		info.packages.push(pkg)
+	}
+
+	/* for (const pkg of packages) {
 		const packagePath = path.join(marketplaceConfig.paths.packages, pkg);
 		const packageData = await readPackageJson(packagePath);
 		core.info(JSON.stringify(packageData));
 		info.packages = info.packages.concat(packageData);
-	}
+	} */
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));
 

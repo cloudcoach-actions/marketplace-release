@@ -23,6 +23,7 @@ export interface Package {
 	versionId: string;
 	description: string;
 	version: string;
+	documentation?: string;
 }
 
 export interface IndexData {
