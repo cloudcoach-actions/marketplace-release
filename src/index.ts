@@ -37,7 +37,6 @@ const SFDX_PROJECT_JSON_FILE: string = path.join(
 	GITHUB_WORKSPACE,
 	'sfdx-project.json',
 );
-const CONTENT_DIR: string = path.join(GITHUB_WORKSPACE, 'content');
 const DIST_FOLDER: string = path.join(GITHUB_WORKSPACE, 'dist');
 const PACKAGE_FILE_NAME: string = 'sfpackage.json';
 const README_FILE_NAME: string = 'README.md';
@@ -568,23 +567,6 @@ const readPackageJson = async (packageFilePath: string): Promise<Package[]> => {
 	}
 };
 
-/* const readPackageJson = async (
-	packageFilePath: string,
-): Promise<PackageData> => {
-	const packageContent = await fsPromises.readFile(packageFilePath, 'utf8');
-	const parsedContent = JSON.parse(packageContent);
-
-	const packages = Array.isArray(parsedContent)
-		? parsedContent
-		: [parsedContent];
-	const applyDocsToAllPackages = Array.isArray(parsedContent);
-
-	return {
-		packages,
-		applyDocsToAllPackages,
-	};
-}; */
-
 /**
  * Reads the contents of a file at a specified path.
  *
@@ -628,6 +610,33 @@ const uploadReleaseAsset = async (
 	});
 };
 
+/**
+ * Helper function to find a file with a case-insensitive name check.
+ *
+ * @param directory The directory to search in.
+ * @param fileName The name of the file to find.
+ * @returns The path to the file if found, otherwise null.
+ */
+const findFileCaseInsensitive = async (
+	directory: string,
+	fileName: string,
+): Promise<string | null> => {
+	const files = await fsPromises.readdir(directory);
+	const lowerCaseFileName = fileName.toLowerCase();
+	const foundFile = files.find(
+		file => file.toLowerCase() === lowerCaseFileName,
+	);
+	return foundFile ? path.join(directory, foundFile) : null;
+};
+
+/**
+ * Reads contents of package folders recursively and returns an array of
+ * data extracted from the package.json files. Additionally, if a README.md
+ * file is present in the package folder, the contents are added to the
+ * returned value.
+ *
+ * @param packageDir The path to the package directory.
+ */
 const getPackageData = async (packageDir): Promise<Package[]> => {
 	const packages = await fsPromises.readdir(packageDir, {
 		withFileTypes: true,
@@ -641,18 +650,19 @@ const getPackageData = async (packageDir): Promise<Package[]> => {
 			results = results.concat(subResults);
 		} else if (entry.isFile()) {
 			if (entry.name === PACKAGE_FILE_NAME) {
-				// const packageData = await readPackageJson(entryPath);
-				const packages  = await readPackageJson(entryPath);
-				// const result: PackageData = { ...packageData };
-				const readmePath = path.join(packageDir, README_FILE_NAME);
-				if (await fileExists(readmePath)) {
+				const packages = await readPackageJson(entryPath);
+				const readmePath = await findFileCaseInsensitive(
+					packageDir,
+					README_FILE_NAME,
+				);
+				if (readmePath) {
 					try {
 						const documentation = await readFile(readmePath);
 						packages.forEach(pkg => {
 							pkg.documentation = documentation;
 						});
 					} catch (ex) {
-						captureError(ex, `Error reading readme file ${readmePath}`);
+						captureError(ex, `Error reading README.md file ${readmePath}`);
 					}
 				}
 				results.push(...packages);
@@ -664,6 +674,33 @@ const getPackageData = async (packageDir): Promise<Package[]> => {
 };
 
 /**
+ * Loads the marketplace configuration from the root of the repository. This
+ * provides the paths to required directories and files.
+ *
+ * @param marketplaceFile The path to the marketplace.json file.
+ */
+const loadMarketplaceConfig = async (
+	marketplaceFile: string,
+): Promise<void> => {
+	try {
+		const content = await fsPromises.readFile(marketplaceFile, 'utf8');
+		marketplaceConfig = JSON.parse(content) as MarketplaceConfig;
+		marketplaceConfig.paths.bundles = path.join(
+			GITHUB_WORKSPACE,
+			marketplaceConfig.paths.bundles,
+		);
+		marketplaceConfig.paths.packages = path.join(
+			GITHUB_WORKSPACE,
+			marketplaceConfig.paths.packages,
+		);
+		core.info(JSON.stringify(marketplaceConfig));
+		core.info('Marketplace configuration loaded successfully.');
+	} catch (error) {
+		core.setFailed(`Failed to load marketplace configuration: ${error}`);
+	}
+};
+
+/**
  * Processes a specified content folder and creates a GitHub release containing
  * packaged install and uninstall feature zip files as release assets.
  *
@@ -672,11 +709,11 @@ const getPackageData = async (packageDir): Promise<Package[]> => {
 const run = async (indexFile: string): Promise<void> => {
 	// Get a list of each of the feature folders
 	const features = await fsPromises.readdir(marketplaceConfig.paths.bundles);
+	core.info('Features: ' + JSON.stringify(features));
 
 	// Get a list of each of the packages
-	// const packages = await fsPromises.readdir(marketplaceConfig.paths.packages);
 	const packages = await getPackageData(marketplaceConfig.paths.packages);
-	console.log(packages);
+	core.info('Packages: ' + JSON.stringify(packages));
 
 	// Create an object to store the index data as we iterate through each feature
 	const info: IndexData = {
@@ -748,15 +785,8 @@ const run = async (indexFile: string): Promise<void> => {
 
 	for (const pkg of packages) {
 		core.info(JSON.stringify(pkg));
-		info.packages.push(pkg)
+		info.packages.push(pkg);
 	}
-
-	/* for (const pkg of packages) {
-		const packagePath = path.join(marketplaceConfig.paths.packages, pkg);
-		const packageData = await readPackageJson(packagePath);
-		core.info(JSON.stringify(packageData));
-		info.packages = info.packages.concat(packageData);
-	} */
 
 	core.info('index.json: ' + JSON.stringify(info, null, 2));
 
@@ -788,27 +818,6 @@ const run = async (indexFile: string): Promise<void> => {
 		await discardTempFileChanges();
 	} else {
 		core.info('No changes to commit');
-	}
-};
-
-const loadMarketplaceConfig = async (
-	marketplaceFile: string,
-): Promise<void> => {
-	try {
-		const content = await fsPromises.readFile(marketplaceFile, 'utf8');
-		marketplaceConfig = JSON.parse(content) as MarketplaceConfig;
-		marketplaceConfig.paths.bundles = path.join(
-			GITHUB_WORKSPACE,
-			marketplaceConfig.paths.bundles,
-		);
-		marketplaceConfig.paths.packages = path.join(
-			GITHUB_WORKSPACE,
-			marketplaceConfig.paths.packages,
-		);
-		core.info(JSON.stringify(marketplaceConfig));
-		core.info('Marketplace configuration loaded successfully.');
-	} catch (error) {
-		core.setFailed(`Failed to load marketplace configuration: ${error}`);
 	}
 };
 
