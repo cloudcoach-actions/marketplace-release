@@ -27,6 +27,8 @@ export interface Package {
 }
 
 export interface IndexData {
+	title?: string;
+	description?: string;
 	bundles: FeatureBundle[];
 	packages: Package[];
 }
@@ -38,6 +40,8 @@ export interface MarketplaceConfigPaths {
 
 export interface MarketplaceConfig {
 	paths: MarketplaceConfigPaths;
+	title?: string;
+	description?: string;
 }
 
 export type SalesforceMetadataType =

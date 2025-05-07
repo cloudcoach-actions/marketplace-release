@@ -720,6 +720,12 @@ const run = async (indexFile: string): Promise<void> => {
 		bundles: [],
 		packages: [],
 	};
+	// Properties to be copied from the marketplace config
+	[ 'title', 'description' ].forEach(key => {
+		if (marketplaceConfig[key]) {
+			info[key] = marketplaceConfig[key];
+		}
+	});
 
 	// Keep track of created zip file paths for later use
 	const zipPaths: string[] = [];
