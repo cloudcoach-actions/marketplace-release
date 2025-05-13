@@ -10,9 +10,7 @@ import {
 	FeatureBundle,
 	IndexData,
 	MarketplaceConfig,
-	metadataTypeFolderMappings,
 	Package,
-	SalesforceMetadataType,
 } from './models/marketplace.models';
 import { FolderStructureBuilder } from './utils/folder-parser';
 
@@ -24,14 +22,13 @@ const RELEASE_VERSION: string = core.getInput('release-version', {
 });
 
 // Environment variables
-const GITHUB_TRIGGERING_ACTOR: string = process.env.GITHUB_TRIGGERING_ACTOR!;
 const GITHUB_WORKSPACE: string = process.env.GITHUB_WORKSPACE!;
 
 // Constants
 const INDEX_FILE: string = path.join(GITHUB_WORKSPACE, 'index.json');
 const MARKETPLACE_FILE: string = path.join(
 	GITHUB_WORKSPACE,
-	'marketplace.json',
+	'info.json',
 );
 const SFDX_PROJECT_JSON_FILE: string = path.join(
 	GITHUB_WORKSPACE,
@@ -45,23 +42,12 @@ const IGNORED_DIRECTORY_CONTENT = [
 	'.DS_Store',
 	'package.xml',
 	'destructiveChanges.xml',
-	'info.json',
+	'bundle.json',
 ];
 
 const errors: string[] = [];
 const octokit = github.getOctokit(GITHUB_TOKEN);
 let marketplaceConfig: MarketplaceConfig;
-
-/**
- * Local metadata folder mappings primarily used for comparing folder names
- * using lower case keys.
- */
-const folderMappings: Record<string, SalesforceMetadataType> = Object.keys(
-	metadataTypeFolderMappings,
-).reduce((acc, key) => {
-	acc[key.toLowerCase()] = metadataTypeFolderMappings[key];
-	return acc;
-}, {} as Record<string, SalesforceMetadataType>);
 
 /**
  * Read all files from the given folders and their subfolders using fs.readdir's
@@ -154,7 +140,7 @@ const zipFolder = async (sourceDir: string, outPath: string): Promise<void> => {
 		// Append files from the source directory, excluding the 'dist' folder
 		archive.glob('**/*', {
 			cwd: sourceDir,
-			ignore: ['dist/**', 'info.json'],
+			ignore: ['dist/**', 'bundle.json'],
 		});
 
 		archive.finalize();
@@ -393,42 +379,6 @@ const hasPendingChanges = async (): Promise<boolean> => {
 };
 
 /**
- * Uses the GitHub cli to commit changes made during the execution of the action.
- */
-const commit = async () => {
-	try {
-		// Configure git
-		await exec.exec('git', [
-			'config',
-			'--global',
-			'user.name',
-			'github-actions[bot]',
-		]);
-		await exec.exec('git', [
-			'config',
-			'--global',
-			'user.email',
-			'github-actions[bot]@users.noreply.github.com',
-		]);
-
-		// Add changes
-		await exec.exec('git', ['add', '.']);
-
-		// Commit changes
-		await exec.exec('git', [
-			'commit',
-			'-m',
-			`[ci]: Automated commit from Marketplace Release Action (triggered by @${GITHUB_TRIGGERING_ACTOR})`,
-		]);
-
-		// Push changes
-		await exec.exec('git', ['push']);
-	} catch (ex) {
-		captureError(ex, 'Error committing changes');
-	}
-};
-
-/**
  * Helper function to discard local changes in a specific folder
  */
 const discardLocalChanges = async (folderPath: string) => {
@@ -531,24 +481,10 @@ const fileExists = async (filePath: string): Promise<boolean> =>
 		.catch(() => false);
 
 /**
- * Deletes a file at the specified path.
- *
- * @param filePath The file path of the file to delete.
+ * Helper function to read feature info from a file (e.g., bundle.json)
  */
-const deleteFile = async (filePath: string): Promise<void> => {
-	try {
-		await exec.exec('rm', [filePath]);
-		core.info(`File removed: ${filePath}`);
-	} catch (error) {
-		captureError(error, `Error removing file: ${filePath}`);
-	}
-};
-
-/**
- * Helper function to read feature info from a file (e.g., info.json)
- */
-const readFeatureInfo = async (featurePath: string): Promise<FeatureBundle> => {
-	const infoFilePath = path.join(featurePath, 'info.json');
+const readBundleInfo = async (featurePath: string): Promise<FeatureBundle> => {
+	const infoFilePath = path.join(featurePath, 'bundle.json');
 	const infoContent = await fsPromises.readFile(infoFilePath, 'utf8');
 	return JSON.parse(infoContent) as FeatureBundle;
 };
@@ -734,9 +670,9 @@ const run = async (indexFile: string): Promise<void> => {
 
 	for (const folder of features) {
 		const featurePath = path.join(marketplaceConfig.paths.bundles, folder);
-		// Read the existing info.json file from the feature folder. We'll need
+		// Read the existing bundle.json file from the feature folder. We'll need
 		// this to build the index.json
-		const featureInfo = await readFeatureInfo(featurePath);
+		const featureInfo = await readBundleInfo(featurePath);
 
 		const hasDependencies =
 			!!featureInfo.dependencies && !!featureInfo.dependencies.length;
