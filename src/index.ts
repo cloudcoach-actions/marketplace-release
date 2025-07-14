@@ -731,6 +731,7 @@ const run = async (indexFile: string): Promise<void> => {
 			files: folderStructureBuilder
 				.build()
 				.map(file => path.relative(featurePath, file)),
+			documentation: featureInfo.documentation || '',
 			iconUrl: featureInfo.iconUrl,
 			dependencies: featureInfo.dependencies || [],
 			packageDependencies: featureInfo.packageDependencies || [],
