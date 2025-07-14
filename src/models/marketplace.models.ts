@@ -9,6 +9,7 @@ export interface FeatureBundle {
 	description: string;
 	version: string;
 	files: string[];
+	documentation?: string;
 	iconUrl?: string;
 	dependencies?: string[];
 	packageDependencies?: string[];

@@ -486,7 +486,21 @@ const fileExists = async (filePath: string): Promise<boolean> =>
 const readBundleInfo = async (featurePath: string): Promise<FeatureBundle> => {
 	const infoFilePath = path.join(featurePath, 'bundle.json');
 	const infoContent = await fsPromises.readFile(infoFilePath, 'utf8');
-	return JSON.parse(infoContent) as FeatureBundle;
+	const bundle = JSON.parse(infoContent);
+
+	const readmePath = await findFileCaseInsensitive(
+		featurePath,
+		README_FILE_NAME,
+	);
+	if (readmePath) {
+		try {
+			bundle.documentation = await readFile(readmePath);
+		} catch (ex) {
+			captureError(ex, `Error reading README.md file ${readmePath}`);
+		}
+	}
+
+	return bundle;
 };
 
 /**
